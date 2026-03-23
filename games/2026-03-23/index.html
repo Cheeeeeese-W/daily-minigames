@@ -22,7 +22,7 @@ var CFG = {
   COLORS: ['#FF4757','#3742FA','#2ED573','#ECCC68','#A55EEA'],
   BG_TOP: '#0F0F23', BG_BOT: '#1A1A2E',
   GRID_LINE: 'rgba(255,255,255,0.05)',
-  R1: 10, R2: 16, R3: 24,
+  R1: 15, R2: 16, R3: 24,
   DROP_MS: 200, MERGE_FLASH: 150, MERGE_SCALE: 200,
   EXPLODE_MS: 300, FRAG_FLY: 250, VIB_MS: 100, VIB_WARN: 200,
   GRAVITY: 800, FRAG_SPD: 150, FRAG_GRAV: 200, FRAG_ANGLE: 15,
@@ -318,6 +318,7 @@ function endCombo() {
   if (combo > maxCombo) { maxCombo = combo; }
   combo = 0;
   if (!gameOver) state = 'idle';
+  checkGameOver();
 }
 
 /* ===== EXPLODE ===== */
@@ -455,6 +456,7 @@ function doVibrate() {
       setTimeout(function(){ checkAllMerges(0); }, 50);
     } else {
       state = 'idle';
+      checkGameOver();
     }
   }, CFG.VIB_WARN);
 }
@@ -513,9 +515,14 @@ function drawBall(b, now) {
 
   ctx.save();
   ctx.globalAlpha = b.opacity;
-  if (b.level >= 2) { ctx.shadowColor = b.color; ctx.shadowBlur = b.level===2?8:16; }
+  if (b.level >= 2) { ctx.shadowColor = b.color; ctx.shadowBlur = b.level===2?12:16; }
   ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
   ctx.fillStyle = b.color; ctx.fill();
+  // Lv3 brightness boost +15%
+  if (b.level >= 3) {
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fill();
+  }
   // highlight
   var hl = ctx.createRadialGradient(x-r*0.3,y-r*0.3,0,x,y,r);
   hl.addColorStop(0,'rgba(255,255,255,0.4)'); hl.addColorStop(1,'rgba(255,255,255,0)');
