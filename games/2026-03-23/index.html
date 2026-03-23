@@ -212,30 +212,39 @@ function applyColumnGravity(col) {
   var changed = true;
   while (changed) {
     changed = false;
-    for (var r = CFG.ROWS - 1; r >= 1; r--) {
-      if (grid[col][r] === null) {
-        for (var above = r - 1; above >= 0; above--) {
-          if (grid[col][above] !== null) {
-            var ball = grid[col][above];
-            grid[col][above] = null;
-            grid[col][r] = ball;
-            ball.col = col;
-            ball.row = r;
-            ball.x = col * cellSz;
-            ball.y = r * cellSz;
-            ball.tgtY = r * cellSz;
-            if (ball.level >= 3) {
-              if (col+1 < CFG.COLS) {
-                grid[col+1][above] = null;
-                grid[col+1][r] = ball;
-              }
-              if (above+1 < CFG.ROWS) grid[col][above+1] = null;
-              if (r+1 < CFG.ROWS) grid[col][r+1] = ball;
-              if (col+1 < CFG.COLS && above+1 < CFG.ROWS) grid[col+1][above+1] = null;
-              if (col+1 < CFG.COLS && r+1 < CFG.ROWS) grid[col+1][r+1] = ball;
-            }
+    for (var r = CFG.ROWS - 2; r >= 0; r--) {
+      if (grid[col][r] !== null) {
+        var ball = grid[col][r];
+        var cr = ball.row;
+        if (ball.level >= 3) {
+          // 2x2 ball: check if can fall 1 row
+          if (cr+2 < CFG.ROWS && ball.col+1 < CFG.COLS &&
+              grid[ball.col][cr+2] === null && grid[ball.col+1][cr+2] === null) {
+            // Clear all 4 old cells
+            grid[ball.col][cr] = null;
+            grid[ball.col+1][cr] = null;
+            grid[ball.col][cr+1] = null;
+            grid[ball.col+1][cr+1] = null;
+            // Move down 1
+            ball.row = cr + 1;
+            ball.y = ball.row * cellSz;
+            ball.tgtY = ball.y;
+            // Set all 4 new cells
+            grid[ball.col][ball.row] = ball;
+            grid[ball.col+1][ball.row] = ball;
+            grid[ball.col][ball.row+1] = ball;
+            grid[ball.col+1][ball.row+1] = ball;
             changed = true;
-            break;
+          }
+        } else {
+          // 1x1 ball: check if can fall 1 row
+          if (cr+1 < CFG.ROWS && grid[col][cr+1] === null) {
+            grid[col][cr] = null;
+            ball.row = cr + 1;
+            ball.y = ball.row * cellSz;
+            ball.tgtY = ball.y;
+            grid[col][ball.row] = ball;
+            changed = true;
           }
         }
       }
