@@ -222,7 +222,6 @@ function applyColumnGravity(col) {
             ball.row = r;
             ball.tgtY = r * cellSz;
             if (ball.level >= 3) {
-              // 2x2 ball: update all cells
               if (col+1 < CFG.COLS) {
                 grid[col+1][above] = null;
                 grid[col+1][r] = ball;
@@ -239,6 +238,10 @@ function applyColumnGravity(col) {
       }
     }
   }
+}
+
+function applyAllGravity() {
+  for (var c = 0; c < CFG.COLS; c++) applyColumnGravity(c);
 }
 
 /* ===== NEIGHBOR CHECK ===== */
@@ -300,13 +303,8 @@ function tryMerge(ball, depth) {
   var nb = new Ball(nc, nr, ball.ci, nl);
   if (nl >= 3) placeOnGrid(nb); else grid[nc][nr] = nb;
   balls.push(nb);
-  // apply gravity so balls above the merge gap fall down
-  if (nl >= 3) {
-    applyColumnGravity(nc);
-    if (nc+1 < CFG.COLS) applyColumnGravity(nc+1);
-  } else {
-    applyColumnGravity(nc);
-  }
+  // apply gravity so all balls fall to bottom
+  applyAllGravity();
   sndMergeLv(ball.level);
   addAnim('merge', nb, {}, CFG.MERGE_FLASH + CFG.MERGE_SCALE);
   // chain
@@ -355,10 +353,8 @@ function doExplode(b1, b2, depth) {
       processFrag(frags[j], depth);
       affectedCols[frags[j].tc] = true;
     }
-    // apply gravity to all affected columns
-    for (var col in affectedCols) {
-      if (affectedCols.hasOwnProperty(col)) applyColumnGravity(parseInt(col, 10));
-    }
+    // apply gravity to all columns
+    applyAllGravity();
     // after fragments, end combo or continue chain
     setTimeout(function(){ checkAllMerges(depth+1); }, 100);
   }, CFG.EXPLODE_MS + 50);
@@ -453,6 +449,7 @@ function doVibrate() {
       moved = true;
     }
     if (moved) {
+      applyAllGravity();
       setTimeout(function(){ checkAllMerges(0); }, 50);
     } else {
       state = 'idle';
