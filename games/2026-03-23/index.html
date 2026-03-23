@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Mirror Drift</title>
+<title>镜像漂移</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; touch-action: none; }
@@ -799,8 +799,7 @@ function triggerDeath() {
 
 function updateDead(dt) {
   particles.forEach(p => p.update(dt));
-  // Delay before allowing restart
-  input.clicked = false; // consume any early click
+  // Don't consume input.clicked here — let the game loop handle restart check
 }
 
 // ============================================
@@ -853,12 +852,12 @@ function drawMenu() {
   ctx.fillStyle = COLORS.text;
   ctx.font = 'bold 48px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('MIRROR DRIFT', W / 2, H / 2 - 80);
+  ctx.fillText('镜像漂移', W / 2, H / 2 - 80);
 
   // Subtitle
   ctx.globalAlpha = 0.6;
   ctx.font = '18px monospace';
-  ctx.fillText('Survive both sides', W / 2, H / 2 - 40);
+  ctx.fillText('两侧弹珠同时存活', W / 2, H / 2 - 40);
   ctx.globalAlpha = 1;
 
   // Button
@@ -867,16 +866,16 @@ function drawMenu() {
   ctx.globalAlpha = pulse;
   ctx.fillStyle = COLORS.text;
   ctx.font = '20px monospace';
-  ctx.fillText('Click to Start', W / 2, H / 2 + 20);
+  ctx.fillText('点击开始', W / 2, H / 2 + 20);
   ctx.globalAlpha = 1;
 
   // Best
   ctx.globalAlpha = 0.5;
   ctx.font = '16px monospace';
   ctx.textAlign = 'right';
-  ctx.fillText('Best: ' + bestScore, W - 20, H - 20);
+  ctx.fillText('最高分: ' + bestScore, W - 20, H - 20);
   ctx.textAlign = 'left';
-  ctx.fillText('Controls: Mouse / WASD / Arrows', 20, H - 20);
+  ctx.fillText('操作: 鼠标 / WASD / 方向键', 20, H - 20);
   ctx.globalAlpha = 1;
 }
 
@@ -925,13 +924,13 @@ function drawPlaying() {
   ctx.fillStyle = COLORS.text;
   ctx.font = 'bold 24px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText('Score: ' + score, 15, 35);
+  ctx.fillText('得分: ' + score, 15, 35);
 
   if (combo > 0) {
     ctx.fillStyle = COLORS.combo;
     ctx.font = 'bold 20px monospace';
     ctx.textAlign = 'right';
-    ctx.fillText('Combo: ' + combo, W - 15, 35);
+    ctx.fillText('连击: ' + combo, W - 15, 35);
   }
 }
 
@@ -980,18 +979,18 @@ function drawDead() {
   ctx.fillStyle = COLORS.text;
   ctx.font = 'bold 48px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('GAME OVER', W / 2, H / 2 - 80);
+  ctx.fillText('游戏结束', W / 2, H / 2 - 80);
 
   ctx.font = '24px monospace';
-  ctx.fillText('Score: ' + score, W / 2, H / 2 - 30);
-  ctx.fillText('Best:  ' + bestScore, W / 2, H / 2 + 5);
+  ctx.fillText('得分: ' + score, W / 2, H / 2 - 30);
+  ctx.fillText('最高分: ' + bestScore, W / 2, H / 2 + 5);
 
   // Near miss text
   ctx.globalAlpha = 0.8;
   ctx.fillStyle = '#ff6e40';
   ctx.font = '18px monospace';
   const missDist = !isFinite(deathDistance) ? '∞' : deathDistance < 1 ? '<1' : Math.round(deathDistance);
-  ctx.fillText('Missed by: ' + missDist + 'px', W / 2, H / 2 + 40);
+  ctx.fillText('差: ' + missDist + 'px', W / 2, H / 2 + 40);
   ctx.globalAlpha = 1;
 
   // Retry
@@ -1000,7 +999,7 @@ function drawDead() {
   ctx.globalAlpha = pulse;
   ctx.fillStyle = COLORS.text;
   ctx.font = '20px monospace';
-  ctx.fillText('Click to Retry', W / 2, H / 2 + 90);
+  ctx.fillText('点击重来', W / 2, H / 2 + 90);
   ctx.globalAlpha = 1;
 }
 
