@@ -1,803 +1,709 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>色界竞技场</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Cascade 爆裂连锁</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #0A0A1A; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-canvas { border-radius: 8px; }
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0F0F23;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none}
+canvas{display:block}
 </style>
 </head>
 <body>
-<canvas id="game" width="800" height="600"></canvas>
+<canvas id="c"></canvas>
 <script>
-(function() {
-  'use strict';
+(function(){
+"use strict";
 
-  // ═══════════════ 常量 ═══════════════
-  const COLORS = ['#FF4444', '#4488FF', '#FFDD44'];
-  const COLOR_NAMES = ['红', '蓝', '黄'];
-  const ARENA_CX = 400;
-  const ARENA_CY = 300;
-  const ARENA_R = 280;
-  const PLAYER_R = 12;
-  const ENEMY_R = 10;
-  const PU_SIZE = 16;
-  const SWITCH_CD = 30; // 0.5s @60fps
-  const GRID = 40;
+/* ===== CONFIG ===== */
+var CFG = {
+  COLS: 10, ROWS: 15, CELL: 36,
+  COLORS: ['#FF4757','#3742FA','#2ED573','#ECCC68','#A55EEA'],
+  BG_TOP: '#0F0F23', BG_BOT: '#1A1A2E',
+  GRID_LINE: 'rgba(255,255,255,0.05)',
+  R1: 15, R2: 16, R3: 30,
+  DROP_MS: 200, MERGE_FLASH: 150, MERGE_SCALE: 200,
+  EXPLODE_MS: 300, FRAG_FLY: 250, VIB_MS: 100, VIB_WARN: 200,
+  GRAVITY: 800, FRAG_SPD: 150, FRAG_GRAV: 200, FRAG_ANGLE: 15,
+  VIB_INTERVAL: 8000, VIB_PROB: 0.3, VIB_MAX: 1,
+  SCORE_L1: 10, SCORE_L2: 30, SCORE_L3: 100,
+  COMBO_STEP: 0.5, MAX_DEPTH: 10, MAX_CONSEC: 2,
+  GRACE_MS: 3000, MAX_BALLS: 150
+};
 
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
+/* ===== CANVAS ===== */
+var canvas = document.getElementById('c');
+var ctx = canvas.getContext('2d');
+var dpr = Math.max(1, window.devicePixelRatio || 1);
+var W, H, cellSz, gridOX, gridOY;
 
-  // ═══════════════ 工具函数 ═══════════════
-  function dist(x1, y1, x2, y2) {
-    return Math.sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  var cw = Math.floor(W * 0.92 / CFG.COLS);
+  var ch = Math.floor((H - 90) / CFG.ROWS);
+  cellSz = Math.min(cw, ch, CFG.CELL);
+  gridOX = (W - CFG.COLS * cellSz) / 2;
+  gridOY = 52;
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ===== AUDIO ===== */
+var audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
   }
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
 
-  function distObj(a, b) {
-    return dist(a.x, a.y, b.x, b.y);
+function playTone(freq, dur, vol, type) {
+  if (!audioCtx) return;
+  var osc = audioCtx.createOscillator();
+  var gain = audioCtx.createGain();
+  osc.type = type || 'sine';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + dur);
+}
+
+function playSweep(f1, f2, dur, vol) {
+  if (!audioCtx) return;
+  var osc = audioCtx.createOscillator();
+  var gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(f1, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(f2, audioCtx.currentTime + dur);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + dur);
+}
+
+function playNoise(dur, vol) {
+  if (!audioCtx) return;
+  var bufSz = audioCtx.sampleRate * dur;
+  var buf = audioCtx.createBuffer(1, bufSz, audioCtx.sampleRate);
+  var data = buf.getChannelData(0);
+  for (var i = 0; i < bufSz; i++) data[i] = Math.random() * 2 - 1;
+  var src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  var gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  var filt = audioCtx.createBiquadFilter();
+  filt.type = 'lowpass'; filt.frequency.value = 2000;
+  src.connect(filt); filt.connect(gain); gain.connect(audioCtx.destination);
+  src.start(); src.stop(audioCtx.currentTime + dur);
+}
+
+function sndDrop() { playTone(400, 0.05, 0.3); }
+function sndMergeLv(lv) {
+  if (lv === 1) playSweep(600, 800, 0.1, 0.5);
+  else playSweep(500, 900, 0.15, 0.6);
+}
+function sndExplode() { playNoise(0.2, 0.7); }
+function sndFrag() { playTone(1000, 0.03, 0.2); }
+function sndCombo(n) { playTone(600 * Math.pow(1.0594, n), 0.08, 0.4); }
+function sndVibWarn() { playTone(100, 0.2, 0.2, 'square'); }
+function sndGameOver() { playSweep(800, 200, 0.5, 0.5); }
+
+/* ===== BALL ===== */
+var nextBallId = 1;
+function Ball(col, row, ci, lv) {
+  this.id = nextBallId++;
+  this.col = col; this.row = row;
+  this.ci = ci; this.level = lv;
+  this.x = col * cellSz; this.y = -cellSz;
+  this.tgtY = row * cellSz;
+  this.scale = 1; this.opacity = 1;
+  this.anim = null;
+  this.pulse = Math.random() * Math.PI * 2;
+}
+Object.defineProperty(Ball.prototype, 'color', {
+  get: function() { return CFG.COLORS[this.ci]; }
+});
+Ball.prototype.cells = function() {
+  if (this.level < 3) return [{c:this.col,r:this.row}];
+  return [{c:this.col,r:this.row},{c:this.col+1,r:this.row},{c:this.col,r:this.row+1},{c:this.col+1,r:this.row+1}];
+};
+
+/* ===== GAME STATE ===== */
+var grid, balls, score, hi, combo, maxCombo, bestChain, nextCI;
+var lastCC, consecC, vibrateAcc, gameOver, graceTimer, graceCol;
+var anims, shakeX, shakeY, shakeTimer;
+var state; // 'idle','dropping','merging','vibrating','gameover','start'
+
+function initState() {
+  grid = [];
+  for (var c = 0; c < CFG.COLS; c++) {
+    grid[c] = [];
+    for (var r = 0; r < CFG.ROWS; r++) grid[c][r] = null;
   }
+  balls = []; score = 0; combo = 0; maxCombo = 0; bestChain = 0;
+  nextCI = randCI(-1); lastCC = -1; consecC = 0;
+  vibrateAcc = 0; gameOver = false; graceTimer = -1; graceCol = -1;
+  anims = []; shakeX = 0; shakeY = 0; shakeTimer = 0;
+  state = 'idle';
+  hi = parseInt(localStorage.getItem('cascade_hi') || '0', 10);
+  maxCombo = parseInt(localStorage.getItem('cascade_mc') || '0', 10);
+}
 
-  function rectsOverlap(a, b) {
-    return a.x < b.x + b.width && a.x + a.width > b.x &&
-           a.y < b.y + b.height && a.y + a.height > b.y;
+function randCI(prev) {
+  var ci;
+  do { ci = Math.floor(Math.random() * CFG.COLORS.length); }
+  while (ci === prev && consecC >= CFG.MAX_CONSEC);
+  if (ci === lastCC) consecC++;
+  else { lastCC = ci; consecC = 1; }
+  return ci;
+}
+
+/* ===== GRID HELPERS ===== */
+function removeFromGrid(ball) {
+  var cells = ball.cells();
+  for (var i = 0; i < cells.length; i++) {
+    var g = grid[cells[i].c];
+    if (g) g[cells[i].r] = null;
   }
-
-  function isInsideArena(wall) {
-    var corners = [
-      [wall.x, wall.y],
-      [wall.x + wall.width, wall.y],
-      [wall.x, wall.y + wall.height],
-      [wall.x + wall.width, wall.y + wall.height]
-    ];
-    for (var i = 0; i < corners.length; i++) {
-      if (dist(corners[i][0], corners[i][1], ARENA_CX, ARENA_CY) > ARENA_R - 5) return false;
-    }
-    return true;
+}
+function placeOnGrid(ball) {
+  var cells = ball.cells();
+  for (var i = 0; i < cells.length; i++) {
+    grid[cells[i].c][cells[i].r] = ball;
   }
-
-  function pointInRect(px, py, r) {
-    return px >= r.x && px <= r.x + r.width && py >= r.y && py <= r.y + r.height;
-  }
-
-  function circleRectOverlap(cx, cy, cr, rx, ry, rw, rh) {
-    var nearestX = Math.max(rx, Math.min(cx, rx + rw));
-    var nearestY = Math.max(ry, Math.min(cy, ry + rh));
-    var dx = cx - nearestX;
-    var dy = cy - nearestY;
-    return (dx * dx + dy * dy) < (cr * cr);
-  }
-
-  function clampToArena(x, y, r) {
-    var d = dist(x, y, ARENA_CX, ARENA_CY);
-    var maxD = ARENA_R - r;
-    if (d > maxD) {
-      var angle = Math.atan2(y - ARENA_CY, x - ARENA_CX);
-      return { x: ARENA_CX + Math.cos(angle) * maxD, y: ARENA_CY + Math.sin(angle) * maxD };
-    }
-    return { x: x, y: y };
-  }
-
-  // ═══════════════ 随机生成 ═══════════════
-  function generateWall(existingWalls) {
-    var attempts = 0;
-    while (attempts < 50) {
-      attempts++;
-      var isH = Math.random() < 0.5;
-      var len = (3 + Math.floor(Math.random() * 4)) * GRID;
-      var ci = Math.floor(Math.random() * 3);
-      var angle = Math.random() * Math.PI * 2;
-      var d = Math.random() * 200 + 50;
-      var cx = ARENA_CX + Math.cos(angle) * d;
-      var cy = ARENA_CY + Math.sin(angle) * d;
-      var w = isH ? len : GRID;
-      var h = isH ? GRID : len;
-      var wx = cx - w / 2;
-      var wy = cy - h / 2;
-      var wall = { x: wx, y: wy, width: w, height: h, colorIndex: ci };
-
-      var overlaps = false;
-      for (var i = 0; i < existingWalls.length; i++) {
-        if (rectsOverlap(wall, existingWalls[i])) { overlaps = true; break; }
+}
+function canPlace2x2(c, r) {
+  return c >= 0 && c+1 < CFG.COLS && r >= 0 && r+1 < CFG.ROWS &&
+    grid[c][r]===null && grid[c+1][r]===null && grid[c][r+1]===null && grid[c+1][r+1]===null;
+}
+function findNearest2x2(oc, orow) {
+  for (var dist = 1; dist < 6; dist++) {
+    for (var dc = -dist; dc <= dist; dc++) {
+      for (var dr = -dist; dr <= dist; dr++) {
+        var nc = oc+dc, nr = orow+dr;
+        if (nc>=0 && nc+1<CFG.COLS && nr>=0 && nr+1<CFG.ROWS && canPlace2x2(nc,nr))
+          return {col:nc,row:nr};
       }
-      if (overlaps) continue;
-      if (!isInsideArena(wall)) continue;
-      return wall;
     }
-    return null;
   }
-
-  function generateEnemyAtDist(minDistFromPlayer) {
-    var attempts = 0;
-    while (attempts < 100) {
-      attempts++;
-      var angle = Math.random() * Math.PI * 2;
-      var d = Math.random() * 200 + 100;
-      var ex = ARENA_CX + Math.cos(angle) * d;
-      var ey = ARENA_CY + Math.sin(angle) * d;
-      if (dist(ex, ey, ARENA_CX, ARENA_CY) > 270) continue;
-      if (dist(ex, ey, player.x, player.y) < minDistFromPlayer) continue;
-      return { x: ex, y: ey, colorIndex: Math.floor(Math.random() * 3) };
-    }
-    return null;
-  }
-
-  function generatePowerUp() {
-    var attempts = 0;
-    while (attempts < 100) {
-      attempts++;
-      var angle = Math.random() * Math.PI * 2;
-      var d = Math.random() * 220 + 40;
-      var px = ARENA_CX + Math.cos(angle) * d;
-      var py = ARENA_CY + Math.sin(angle) * d;
-      if (dist(px, py, ARENA_CX, ARENA_CY) > 260) continue;
-      var inWall = false;
-      for (var i = 0; i < walls.length; i++) {
-        if (pointInRect(px, py, walls[i])) { inWall = true; break; }
+  return null;
+}
+function findNearestEmpty(oc, orow) {
+  for (var dist = 1; dist < 5; dist++) {
+    for (var dc = -dist; dc <= dist; dc++) {
+      for (var dr = -dist; dr <= dist; dr++) {
+        var nc = oc+dc, nr = orow+dr;
+        if (nc>=0 && nc<CFG.COLS && nr>=0 && nr<CFG.ROWS && grid[nc][nr]===null)
+          return {col:nc,row:nr};
       }
-      if (inWall) continue;
-      return { x: px, y: py, colorIndex: Math.floor(Math.random() * 3) };
-    }
-    return null;
-  }
-
-  // ═══════════════ 粒子系统 ═══════════════
-  var particles = [];
-
-  function spawnParticles(x, y, color) {
-    for (var i = 0; i < 12; i++) {
-      if (particles.length >= 100) return;
-      var angle = (Math.PI * 2 / 12) * i + Math.random() * 0.5;
-      var spd = 2 + Math.random() * 3;
-      particles.push({
-        x: x, y: y,
-        vx: Math.cos(angle) * spd,
-        vy: Math.sin(angle) * spd,
-        life: 30, color: color, radius: 3
-      });
     }
   }
+  return null;
+}
 
-  function updateParticles() {
-    for (var i = particles.length - 1; i >= 0; i--) {
-      var p = particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.life--;
-      p.radius *= 0.95;
-      if (p.life <= 0) particles.splice(i, 1);
+/* ===== NEIGHBOR CHECK ===== */
+function getSameNeighbors(ball) {
+  var res = [], seen = {};
+  var cells = ball.cells();
+  var dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+  for (var i = 0; i < cells.length; i++) {
+    for (var d = 0; d < dirs.length; d++) {
+      var nc = cells[i].c + dirs[d][0], nr = cells[i].r + dirs[d][1];
+      var key = nc+','+nr;
+      if (seen[key]) continue; seen[key] = true;
+      if (nc<0||nc>=CFG.COLS||nr<0||nr>=CFG.ROWS) continue;
+      var nb = grid[nc][nr];
+      if (nb && nb.ci===ball.ci && nb.level===ball.level && nb.id!==ball.id) {
+        var dup = false;
+        for (var j = 0; j < res.length; j++) if (res[j].id===nb.id) { dup=true; break; }
+        if (!dup) res.push(nb);
+      }
     }
   }
+  return res;
+}
 
-  function renderParticles() {
-    for (var i = 0; i < particles.length; i++) {
-      var p = particles[i];
-      var alpha = p.life / 30;
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+/* ===== ANIMATION QUEUE ===== */
+function addAnim(type, ball, data, dur) {
+  anims.push({type:type, ball:ball, data:data||{}, t0:performance.now(), dur:dur||200, done:false});
+}
+
+/* ===== MERGE ===== */
+function tryMerge(ball, depth) {
+  if (depth > CFG.MAX_DEPTH) { endCombo(); return; }
+  if (ball.level >= 3) {
+    var nb3 = getSameNeighbors(ball);
+    if (nb3.length > 0) { doExplode(ball, nb3[0], depth); return; }
+    endCombo(); return;
   }
+  var nbs = getSameNeighbors(ball);
+  if (nbs.length === 0) { endCombo(); return; }
+  var partner = nbs[0];
+  combo++;
+  if (combo > 1) sndCombo(combo);
+  var sc = ball.level === 1 ? CFG.SCORE_L1 : CFG.SCORE_L2;
+  var mult = 1 + (combo - 1) * CFG.COMBO_STEP;
+  score += Math.floor(sc * mult);
 
-  // ═══════════════ 输入系统 ═══════════════
-  var keys = {};
-  var canvasClicked = false;
+  removeFromGrid(ball); removeFromGrid(partner);
+  balls = balls.filter(function(b){return b.id!==ball.id && b.id!==partner.id;});
 
-  document.addEventListener('keydown', function(e) {
-    keys[e.key.toLowerCase()] = true;
-    if (e.key.toLowerCase() === 'q') attemptColorSwitch();
-  });
-  document.addEventListener('keyup', function(e) {
-    keys[e.key.toLowerCase()] = false;
-  });
-
-  canvas.addEventListener('click', function(e) {
-    canvasClicked = true;
-  });
-
-  function getPlayerMovement() {
-    var dx = 0, dy = 0;
-    if (keys['w'] || keys['arrowup']) dy -= 1;
-    if (keys['s'] || keys['arrowdown']) dy += 1;
-    if (keys['a'] || keys['arrowleft']) dx -= 1;
-    if (keys['d'] || keys['arrowright']) dx += 1;
-    if (dx !== 0 && dy !== 0) {
-      dx *= 0.707;
-      dy *= 0.707;
-    }
-    return { dx: dx, dy: dy };
-  }
-
-  function attemptColorSwitch() {
-    if (gameState !== 'PLAYING') return;
-    if (player.colorSwitchCooldown <= 0) {
-      player.colorIndex = (player.colorIndex + 1) % 3;
-      player.colorSwitchCooldown = SWITCH_CD;
-      player.switchFlash = 12; // flash frames
+  var nl = ball.level + 1;
+  var nc = ball.col, nr = ball.row;
+  if (nl >= 3) {
+    if (!canPlace2x2(nc, nr)) {
+      var pos = findNearest2x2(nc, nr);
+      if (pos) { nc = pos.col; nr = pos.row; }
+      else { doExplode(ball, partner, depth); return; }
     }
   }
+  var nb = new Ball(nc, nr, ball.ci, nl);
+  if (nl >= 3) placeOnGrid(nb); else grid[nc][nr] = nb;
+  balls.push(nb);
+  sndMergeLv(ball.level);
+  addAnim('merge', nb, {}, CFG.MERGE_FLASH + CFG.MERGE_SCALE);
+  // chain
+  state = 'merging';
+  setTimeout(function(){ tryMerge(nb, depth+1); }, CFG.MERGE_FLASH + CFG.MERGE_SCALE + 30);
+}
 
-  // ═══════════════ 游戏状态 ═══════════════
-  var gameState = 'MENU';
-  var score = 0;
-  var survivalFrames = 0;
-  var killCount = 0;
-  var collectCount = 0;
-  var enemySpawnTimer = 0;
-  var puSpawnTimer = 0;
-  var wallSpawnTimer = 0;
-  var difficultyFrames = 0;
-  var enemySpeedMult = 1.0;
+function endCombo() {
+  if (combo > maxCombo) { maxCombo = combo; }
+  combo = 0;
+  if (!gameOver) state = 'idle';
+}
 
-  var player = {};
-  var enemies = [];
-  var walls = [];
-  var powerUps = [];
+/* ===== EXPLODE ===== */
+function doExplode(b1, b2, depth) {
+  removeFromGrid(b1); removeFromGrid(b2);
+  balls = balls.filter(function(b){return b.id!==b1.id && b.id!==b2.id;});
+  combo++;
+  var mult = 1 + (combo-1)*CFG.COMBO_STEP;
+  score += Math.floor(CFG.SCORE_L3 * mult);
+  sndExplode();
 
-  function resetGame() {
-    player = {
-      x: ARENA_CX, y: ARENA_CY,
-      radius: PLAYER_R, speed: 3,
-      colorIndex: 0, colorSwitchCooldown: 0,
-      hp: 3, pulsePhase: 0, switchFlash: 0
-    };
-    enemies = [];
-    walls = [];
-    powerUps = [];
-    particles = [];
-    score = 0;
-    survivalFrames = 0;
-    killCount = 0;
-    collectCount = 0;
-    enemySpawnTimer = 0;
-    puSpawnTimer = 0;
-    wallSpawnTimer = 0;
-    difficultyFrames = 0;
-    enemySpeedMult = 1.0;
+  var cx = (b1.col + b2.col) / 2, cy = (b1.row + b2.row) / 2;
+  var dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+  var frags = [];
+  for (var i = 0; i < 4; i++) {
+    var angle = Math.atan2(dirs[i][1], dirs[i][0]) + (Math.random()-0.5)*CFG.FRAG_ANGLE*Math.PI/180;
+    frags.push({
+      ci: b1.ci,
+      sx: cx*cellSz+cellSz/2, sy: cy*cellSz+cellSz/2,
+      vx: Math.cos(angle)*CFG.FRAG_SPD, vy: Math.sin(angle)*CFG.FRAG_SPD,
+      tc: Math.round(cx+dirs[i][0]), tr: Math.round(cy+dirs[i][1])
+    });
+  }
+  addAnim('explode', null, {x:cx*cellSz+cellSz/2,y:cy*cellSz+cellSz/2,color:b1.color}, CFG.EXPLODE_MS);
+  shakeTimer = 150; shakeX = 5; shakeY = 5;
+  // schedule fragments
+  state = 'merging';
+  setTimeout(function(){
+    for (var j = 0; j < frags.length; j++) processFrag(frags[j], depth);
+    // after fragments, end combo or continue chain
+    setTimeout(function(){ checkAllMerges(depth+1); }, 100);
+  }, CFG.EXPLODE_MS + 50);
+}
 
-    // Initial walls (3)
-    for (var i = 0; i < 3; i++) {
-      var w = generateWall(walls);
-      if (w) walls.push(w);
-    }
-    // Initial enemies (2)
-    for (var j = 0; j < 2; j++) {
-      var eg = generateEnemyAtDist(200);
-      if (eg) enemies.push({
-        x: eg.x, y: eg.y, radius: ENEMY_R, colorIndex: eg.colorIndex,
-        baseSpeed: 2.5, speedMultiplier: 1.0,
-        alive: true, respawnTimer: 0, trail: []
-      });
-    }
-    // Initial powerups (3, one per color)
-    for (var k = 0; k < 3; k++) {
-      var pu = generatePowerUp();
-      if (pu) powerUps.push({
-        x: pu.x, y: pu.y, colorIndex: pu.colorIndex,
-        size: PU_SIZE, rotation: Math.random() * Math.PI * 2,
-        lifetime: 1800, pulsePhase: Math.random() * Math.PI * 2
-      });
+function processFrag(frag, depth) {
+  var tc = frag.tc, tr = frag.tr;
+  if (tc<0||tc>=CFG.COLS||tr<0||tr>=CFG.ROWS) return;
+  var exist = grid[tc][tr];
+  if (exist === null) {
+    var b = new Ball(tc, tr, frag.ci, 1);
+    b.y = frag.sy - gridOY; b.x = frag.sx - gridOX; // visual start
+    grid[tc][tr] = b; balls.push(b);
+    sndFrag();
+    addAnim('fragLand', b, {}, CFG.FRAG_FLY);
+  } else if (exist.ci === frag.ci && exist.level === 1) {
+    removeFromGrid(exist);
+    balls = balls.filter(function(b){return b.id!==exist.id;});
+    var b2 = new Ball(tc, tr, frag.ci, 2);
+    grid[tc][tr] = b2; balls.push(b2);
+    combo++;
+    var mult2 = 1 + (combo-1)*CFG.COMBO_STEP;
+    score += Math.floor(CFG.SCORE_L1 * mult2);
+    sndMergeLv(1);
+    addAnim('merge', b2, {}, CFG.MERGE_FLASH);
+  } else {
+    var emp = findNearestEmpty(tc, tr);
+    if (emp) {
+      var b3 = new Ball(emp.col, emp.row, frag.ci, 1);
+      grid[emp.col][emp.row] = b3; balls.push(b3);
+      sndFrag();
+      addAnim('fragLand', b3, {}, CFG.FRAG_FLY);
     }
   }
+}
 
-  // ═══════════════ 更新逻辑 ═══════════════
-  function update() {
-    survivalFrames++;
-    score += 1 / 60;
+function checkAllMerges(depth) {
+  if (depth > CFG.MAX_DEPTH) { endCombo(); return; }
+  for (var i = 0; i < balls.length; i++) {
+    var b = balls[i];
+    var nbs = getSameNeighbors(b);
+    if (nbs.length > 0) {
+      // only trigger for one pair
+      if (b.level < 3) {
+        tryMerge(b, depth);
+      } else {
+        doExplode(b, nbs[0], depth);
+      }
+      return;
+    }
+  }
+  endCombo();
+}
 
-    // Player movement
-    var mv = getPlayerMovement();
-    var nextX = player.x + mv.dx * player.speed;
-    var nextY = player.y + mv.dy * player.speed;
-
-    // Arena boundary
-    var clamped = clampToArena(nextX, nextY, player.radius);
-    nextX = clamped.x;
-    nextY = clamped.y;
-
-    // Wall collision for player
-    var blocked = false;
-    for (var wi = 0; wi < walls.length; wi++) {
-      var w = walls[wi];
-      if (player.colorIndex !== w.colorIndex) {
-        if (circleRectOverlap(nextX, nextY, player.radius, w.x, w.y, w.width, w.height)) {
-          blocked = true;
-          break;
+/* ===== VIBRATE ===== */
+function doVibrate() {
+  if (gameOver || state !== 'idle') return;
+  // warning shake visual
+  addAnim('vibWarn', null, {}, CFG.VIB_WARN);
+  sndVibWarn();
+  state = 'vibrating';
+  setTimeout(function(){
+    var moved = false;
+    // gather movable balls
+    var list = [];
+    for (var r = CFG.ROWS-1; r >= 0; r--) {
+      for (var c = 0; c < CFG.COLS; c++) {
+        if (grid[c][r] && !grid[c][r].anim && grid[c][r].level < 3) {
+          list.push({ball:grid[c][r],c:c,r:r});
         }
       }
     }
-    if (!blocked) {
-      player.x = nextX;
-      player.y = nextY;
+    // shuffle
+    for (var si = list.length-1; si > 0; si--) {
+      var ri = Math.floor(Math.random()*(si+1));
+      var tmp = list[si]; list[si] = list[ri]; list[ri] = tmp;
     }
-
-    // Color switch cooldown
-    if (player.colorSwitchCooldown > 0) player.colorSwitchCooldown--;
-    if (player.switchFlash > 0) player.switchFlash--;
-    player.pulsePhase += 0.125; // ~0.5s period at 60fps
-
-    // Update enemies
-    for (var ei = 0; ei < enemies.length; ei++) {
-      var e = enemies[ei];
-      if (!e.alive) {
-        e.respawnTimer--;
-        if (e.respawnTimer <= 0) {
-          var regen = generateEnemyAtDist(200);
-          if (regen) {
-            e.x = regen.x;
-            e.y = regen.y;
-            e.colorIndex = regen.colorIndex;
-            e.alive = true;
-            e.speedMultiplier = enemySpeedMult;
-            e.trail = [];
-          }
-        }
-        continue;
-      }
-
-      // Trail
-      e.trail.push({ x: e.x, y: e.y });
-      if (e.trail.length > 5) e.trail.shift();
-
-      // AI: move toward player
-      var edx = player.x - e.x;
-      var edy = player.y - e.y;
-      var elen = dist(player.x, player.y, e.x, e.y);
-      if (elen < 1) elen = 1;
-      edx /= elen;
-      edy /= elen;
-
-      var spd = e.baseSpeed * e.speedMultiplier;
-      if (e.colorIndex === player.colorIndex) spd *= 1.3;
-
-      var enextX = e.x + edx * spd;
-      var enextY = e.y + edy * spd;
-
-      // Clamp to arena
-      var ecl = clampToArena(enextX, enextY, e.radius);
-      enextX = ecl.x;
-      enextY = ecl.y;
-
-      // Wall collision for enemy
-      var eBlocked = false;
-      for (var ewi = 0; ewi < walls.length; ewi++) {
-        var ew = walls[ewi];
-        if (e.colorIndex !== ew.colorIndex) {
-          if (circleRectOverlap(enextX, enextY, e.radius, ew.x, ew.y, ew.width, ew.height)) {
-            eBlocked = true;
-            break;
-          }
-        }
-      }
-      if (!eBlocked) {
-        e.x = enextX;
-        e.y = enextY;
-      }
+    var limit = Math.floor(list.length * CFG.VIB_PROB);
+    for (var vi = 0; vi < limit; vi++) {
+      var item = list[vi];
+      var dirs = [];
+      if (item.c>0 && !grid[item.c-1][item.r]) dirs.push([-1,0]);
+      if (item.c<CFG.COLS-1 && !grid[item.c+1][item.r]) dirs.push([1,0]);
+      if (item.r>0 && !grid[item.c][item.r-1]) dirs.push([0,-1]);
+      if (item.r<CFG.ROWS-1 && !grid[item.c][item.r+1]) dirs.push([0,1]);
+      if (dirs.length === 0) continue;
+      var pick = dirs[Math.floor(Math.random()*dirs.length)];
+      var nc2 = item.c+pick[0], nr2 = item.r+pick[1];
+      grid[item.c][item.r] = null;
+      grid[nc2][nr2] = item.ball;
+      item.ball.col = nc2; item.ball.row = nr2;
+      moved = true;
     }
-
-    // Player vs Enemy collision
-    for (var ci = 0; ci < enemies.length; ci++) {
-      var ec = enemies[ci];
-      if (!ec.alive) continue;
-      if (distObj(player, ec) < player.radius + ec.radius) {
-        if (player.colorIndex === ec.colorIndex) {
-          // Kill
-          ec.alive = false;
-          ec.respawnTimer = 300;
-          score += 50;
-          killCount++;
-          spawnParticles(ec.x, ec.y, COLORS[ec.colorIndex]);
-        } else {
-          // Take damage
-          player.hp--;
-          if (player.hp <= 0) {
-            gameState = 'GAME_OVER';
-            return;
-          }
-          // Knockback enemy
-          var bAngle = Math.atan2(ec.y - player.y, ec.x - player.x);
-          ec.x += Math.cos(bAngle) * 30;
-          ec.y += Math.sin(bAngle) * 30;
-          var ecl2 = clampToArena(ec.x, ec.y, ec.radius);
-          ec.x = ecl2.x;
-          ec.y = ecl2.y;
-        }
-      }
-    }
-
-    // Player vs PowerUp
-    for (var pi = powerUps.length - 1; pi >= 0; pi--) {
-      var pu = powerUps[pi];
-      if (distObj(player, pu) < player.radius + pu.size) {
-        if (player.colorIndex === pu.colorIndex) {
-          score += 10;
-          collectCount++;
-          spawnParticles(pu.x, pu.y, COLORS[pu.colorIndex]);
-          powerUps.splice(pi, 1);
-          continue;
-        }
-      }
-      pu.lifetime--;
-      pu.rotation += 0.02;
-      pu.pulsePhase += 0.1;
-      if (pu.lifetime <= 0) powerUps.splice(pi, 1);
-    }
-
-    // Spawning
-    enemySpawnTimer++;
-    var spawnInterval = Math.max(300, 600 - Math.floor(difficultyFrames / 1800) * 50);
-    var aliveCount = 0;
-    for (var ac = 0; ac < enemies.length; ac++) { if (enemies[ac].alive) aliveCount++; }
-    if (enemySpawnTimer >= spawnInterval && aliveCount < 20) {
-      var ne = generateEnemyAtDist(200);
-      if (ne) enemies.push({
-        x: ne.x, y: ne.y, radius: ENEMY_R, colorIndex: ne.colorIndex,
-        baseSpeed: 2.5, speedMultiplier: enemySpeedMult,
-        alive: true, respawnTimer: 0, trail: []
-      });
-      enemySpawnTimer = 0;
-    }
-
-    puSpawnTimer++;
-    if (puSpawnTimer >= 300 && powerUps.length < 10) {
-      var npu = generatePowerUp();
-      if (npu) powerUps.push({
-        x: npu.x, y: npu.y, colorIndex: npu.colorIndex,
-        size: PU_SIZE, rotation: Math.random() * Math.PI * 2,
-        lifetime: 1800, pulsePhase: 0
-      });
-      puSpawnTimer = 0;
-    }
-
-    wallSpawnTimer++;
-    if (wallSpawnTimer >= 1200 && walls.length < 15) {
-      var nw = generateWall(walls);
-      if (nw) walls.push(nw);
-      wallSpawnTimer = 0;
-    }
-
-    // Difficulty
-    difficultyFrames++;
-    if (difficultyFrames % 1800 === 0) {
-      enemySpeedMult = Math.min(2.0, enemySpeedMult + 0.1);
-      for (var di = 0; di < enemies.length; di++) {
-        enemies[di].speedMultiplier = enemySpeedMult;
-      }
-    }
-
-    updateParticles();
-  }
-
-  // ═══════════════ 渲染 ═══════════════
-  function renderBackground() {
-    ctx.fillStyle = '#1A1A2E';
-    ctx.fillRect(0, 0, 800, 600);
-
-    // Arena circle
-    ctx.fillStyle = '#0F0F23';
-    ctx.beginPath();
-    ctx.arc(ARENA_CX, ARENA_CY, ARENA_R, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Arena border
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(ARENA_CX, ARENA_CY, ARENA_R, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  function renderWalls() {
-    for (var i = 0; i < walls.length; i++) {
-      var w = walls[i];
-      var col = COLORS[w.colorIndex];
-      ctx.fillStyle = col.replace(')', ',0.4)').replace('rgb', 'rgba');
-      // Hex to rgba
-      var r = parseInt(col.substr(1, 2), 16);
-      var g = parseInt(col.substr(3, 2), 16);
-      var b = parseInt(col.substr(5, 2), 16);
-      ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.4)';
-      ctx.fillRect(w.x, w.y, w.width, w.height);
-      ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.8)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(w.x, w.y, w.width, w.height);
-    }
-  }
-
-  function renderPowerUps() {
-    for (var i = 0; i < powerUps.length; i++) {
-      var pu = powerUps[i];
-      var col = COLORS[pu.colorIndex];
-
-      // Pulse glow
-      var glowR = pu.size + 6 * Math.sin(pu.pulsePhase);
-      var gr = parseInt(col.substr(1, 2), 16);
-      var gg = parseInt(col.substr(3, 2), 16);
-      var gb = parseInt(col.substr(5, 2), 16);
-      ctx.globalAlpha = 0.3;
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.arc(pu.x, pu.y, glowR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-
-      // Diamond
-      ctx.save();
-      ctx.translate(pu.x, pu.y);
-      ctx.rotate(pu.rotation);
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.moveTo(0, -pu.size);
-      ctx.lineTo(pu.size, 0);
-      ctx.lineTo(0, pu.size);
-      ctx.lineTo(-pu.size, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  function renderEnemies() {
-    for (var i = 0; i < enemies.length; i++) {
-      var e = enemies[i];
-      if (!e.alive) continue;
-
-      // Trail
-      for (var ti = 0; ti < e.trail.length; ti++) {
-        var t = e.trail[ti];
-        ctx.globalAlpha = (ti + 1) * 0.08;
-        ctx.fillStyle = COLORS[e.colorIndex];
-        ctx.beginPath();
-        ctx.arc(t.x, t.y, e.radius * 0.6, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-
-      // Body
-      ctx.fillStyle = COLORS[e.colorIndex];
-      ctx.beginPath();
-      ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Spikes
-      var spikeCount = 8;
-      for (var si = 0; si < spikeCount; si++) {
-        var a = (Math.PI * 2 / spikeCount) * si;
-        var baseX = e.x + Math.cos(a) * e.radius;
-        var baseY = e.y + Math.sin(a) * e.radius;
-        var tipX = e.x + Math.cos(a) * (e.radius + 6);
-        var tipY = e.y + Math.sin(a) * (e.radius + 6);
-        var perpA = a + Math.PI / 2;
-        var bw = 3;
-        ctx.fillStyle = COLORS[e.colorIndex];
-        ctx.beginPath();
-        ctx.moveTo(baseX + Math.cos(perpA) * bw, baseY + Math.sin(perpA) * bw);
-        ctx.lineTo(tipX, tipY);
-        ctx.lineTo(baseX - Math.cos(perpA) * bw, baseY - Math.sin(perpA) * bw);
-        ctx.closePath();
-        ctx.fill();
-      }
-    }
-  }
-
-  function renderPlayer() {
-    var p = player;
-
-    // Flash effect on color switch
-    if (p.switchFlash > 0) {
-      ctx.globalAlpha = 0.4;
-      ctx.fillStyle = COLORS[p.colorIndex];
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.radius + 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-
-    // Pulse ring
-    var pulseR = p.radius + 4 * Math.sin(p.pulsePhase);
-    ctx.strokeStyle = COLORS[p.colorIndex];
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, pulseR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // White body
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  function renderUI() {
-    // Top-left: color name
-    var col = COLORS[player.colorIndex];
-    ctx.fillStyle = col;
-    ctx.font = 'bold 18px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText('色界: ' + COLOR_NAMES[player.colorIndex], 20, 30);
-
-    // Cooldown indicator
-    if (player.colorSwitchCooldown > 0) {
-      ctx.fillStyle = '#888';
-      ctx.font = '14px sans-serif';
-      ctx.fillText('冷却中...', 20, 50);
-    }
-
-    // Top-center: score
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 24px monospace';
-    ctx.textAlign = 'center';
-    var displayScore = Math.floor(score);
-    if (!isFinite(displayScore)) displayScore = 0;
-    ctx.fillText('得分: ' + displayScore, 400, 30);
-
-    // Top-right: HP
-    ctx.textAlign = 'right';
-    ctx.font = '24px sans-serif';
-    var hpStr = '';
-    for (var i = 0; i < 3; i++) {
-      hpStr += (i < player.hp) ? '♥ ' : '♡ ';
-    }
-    ctx.fillStyle = '#FF4444';
-    ctx.fillText(hpStr, 780, 30);
-
-    // Bottom: survival time and stats
-    var survSec = Math.floor(survivalFrames / 60);
-    if (!isFinite(survSec)) survSec = 0;
-    var mins = Math.floor(survSec / 60);
-    var secs = survSec % 60;
-    var timeStr = mins + ':' + (secs < 10 ? '0' : '') + secs;
-
-    ctx.fillStyle = '#888888';
-    ctx.font = '14px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('存活: ' + timeStr + '    击杀: ' + killCount + '    道具: ' + collectCount, 400, 588);
-
-    // Color switch cooldown bar at bottom
-    if (player.colorSwitchCooldown > 0) {
-      var barW = 100;
-      var barH = 4;
-      var barX = 350;
-      var barY = 595;
-      var fill = player.colorSwitchCooldown / SWITCH_CD;
-      ctx.fillStyle = '#333';
-      ctx.fillRect(barX, barY, barW, barH);
-      ctx.fillStyle = COLORS[player.colorIndex];
-      ctx.fillRect(barX, barY, barW * (1 - fill), barH);
-    }
-  }
-
-  function renderMenu() {
-    renderBackground();
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 36px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('色界竞技场', 400, 200);
-
-    ctx.fillStyle = '#AAAAAA';
-    ctx.font = '16px sans-serif';
-    ctx.fillText('方向键 / WASD 移动', 400, 280);
-    ctx.fillText('Q 切换颜色（红→蓝→黄）', 400, 310);
-    ctx.fillText('同色墙可穿过，同色敌人可击杀', 400, 340);
-
-    // Start button
-    ctx.fillStyle = '#4488FF';
-    roundRect(300, 400, 200, 50, 10);
-    ctx.fill();
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillText('开始游戏', 400, 432);
-
-    ctx.fillStyle = '#666';
-    ctx.font = '12px sans-serif';
-    ctx.fillText('点击按钮或按任意键开始', 400, 480);
-  }
-
-  function renderGameOver() {
-    renderBackground();
-    // Dim overlay
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(0, 0, 800, 600);
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 36px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('游戏结束', 400, 180);
-
-    var survSec = Math.floor(survivalFrames / 60);
-    if (!isFinite(survSec)) survSec = 0;
-    var mins = Math.floor(survSec / 60);
-    var secs = survSec % 60;
-    var timeStr = mins + '分' + (secs < 10 ? '0' : '') + secs + '秒';
-
-    ctx.font = '20px sans-serif';
-    ctx.fillStyle = '#CCCCCC';
-    ctx.fillText('最终得分: ' + Math.floor(score), 400, 250);
-    ctx.fillText('存活时间: ' + timeStr, 400, 285);
-    ctx.fillText('击杀敌人: ' + killCount, 400, 320);
-    ctx.fillText('收集道具: ' + collectCount, 400, 355);
-
-    // Restart button
-    ctx.fillStyle = '#4488FF';
-    roundRect(300, 420, 200, 50, 10);
-    ctx.fill();
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillText('再来一局', 400, 452);
-  }
-
-  function roundRect(x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-  }
-
-  // ═══════════════ 主循环 ═══════════════
-  var lastKeyWasQ = false;
-
-  // Detect any key press for menu
-  document.addEventListener('keydown', function(e) {
-    if (gameState === 'MENU') {
-      gameState = 'PLAYING';
-      resetGame();
-    }
-  });
-
-  canvas.addEventListener('click', function(e) {
-    var rect = canvas.getBoundingClientRect();
-    var mx = e.clientX - rect.left;
-    var my = e.clientY - rect.top;
-
-    if (gameState === 'MENU') {
-      // Check start button
-      if (mx >= 300 && mx <= 500 && my >= 400 && my <= 450) {
-        gameState = 'PLAYING';
-        resetGame();
-      }
-    } else if (gameState === 'GAME_OVER') {
-      // Check restart button
-      if (mx >= 300 && mx <= 500 && my >= 420 && my <= 470) {
-        gameState = 'PLAYING';
-        resetGame();
-      }
-    }
-  });
-
-  function gameLoop() {
-    if (gameState === 'PLAYING') {
-      update();
-      renderBackground();
-      renderWalls();
-      renderPowerUps();
-      renderEnemies();
-      renderPlayer();
-      renderParticles();
-      renderUI();
-    } else if (gameState === 'GAME_OVER') {
-      renderGameOver();
+    if (moved) {
+      setTimeout(function(){ checkAllMerges(0); }, 50);
     } else {
-      renderMenu();
+      state = 'idle';
     }
-    requestAnimationFrame(gameLoop);
+  }, CFG.VIB_WARN);
+}
+
+/* ===== DROP ===== */
+function dropBall(col) {
+  if (gameOver) return;
+  if (state !== 'idle') return;
+  ensureAudio();
+  var tgtRow = -1;
+  for (var r = CFG.ROWS-1; r >= 0; r--) {
+    if (grid[col][r] === null) { tgtRow = r; break; }
+  }
+  if (tgtRow === -1) {
+    // col full, try game over check
+    if (graceTimer < 0) { graceTimer = CFG.GRACE_MS; graceCol = col; }
+    return;
+  }
+  var b = new Ball(col, tgtRow, nextCI, 1);
+  grid[col][tgtRow] = b; balls.push(b);
+  sndDrop();
+  b.anim = 'drop';
+  addAnim('drop', b, {fromY:-cellSz, toY:tgtRow*cellSz}, CFG.DROP_MS);
+  nextCI = randCI(nextCI);
+  state = 'dropping';
+  setTimeout(function(){
+    b.anim = null;
+    tryMerge(b, 0);
+  }, CFG.DROP_MS + 10);
+}
+
+/* ===== GAME OVER ===== */
+function checkGameOver() {
+  if (gameOver) return;
+  // check if any col has space in row 0
+  for (var c = 0; c < CFG.COLS; c++) {
+    if (grid[c][0] === null) {
+      if (graceTimer >= 0) { graceTimer = -1; graceCol = -1; }
+      return;
+    }
+  }
+  // all row 0 filled
+  if (graceTimer < 0) { graceTimer = CFG.GRACE_MS; }
+}
+
+/* ===== RENDER HELPERS ===== */
+function easeOut(t) { return 1 - Math.pow(1-t, 3); }
+function easeInOut(t) { return t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
+
+function drawBall(b, now) {
+  var x = gridOX + b.x + cellSz/2;
+  var y = gridOY + b.y + cellSz/2;
+  var r;
+  if (b.level===1) r=CFG.R1; else if(b.level===2) r=CFG.R2; else { r=CFG.R3; r *= 1+0.05*Math.sin(now/400*Math.PI+b.pulse); }
+  r *= b.scale;
+
+  ctx.save();
+  ctx.globalAlpha = b.opacity;
+  if (b.level >= 2) { ctx.shadowColor = b.color; ctx.shadowBlur = b.level===2?8:16; }
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.fillStyle = b.color; ctx.fill();
+  // highlight
+  var hl = ctx.createRadialGradient(x-r*0.3,y-r*0.3,0,x,y,r);
+  hl.addColorStop(0,'rgba(255,255,255,0.4)'); hl.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle = hl; ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.stroke();
+  ctx.restore();
+}
+
+/* ===== MAIN LOOP ===== */
+var lastTime = 0;
+function loop(now) {
+  requestAnimationFrame(loop);
+  var dt = Math.min(now - lastTime, 50);
+  lastTime = now;
+
+  // vibrate timer
+  if (state === 'idle' && !gameOver) {
+    vibrateAcc += dt;
+    if (vibrateAcc >= CFG.VIB_INTERVAL) { vibrateAcc = 0; doVibrate(); }
   }
 
-  // ═══════════════ 启动 ═══════════════
-  resetGame();
-  gameState = 'MENU';
-  gameLoop();
+  // grace timer
+  if (graceTimer >= 0) {
+    graceTimer -= dt;
+    if (graceTimer <= 0) {
+      gameOver = true; state = 'gameover';
+      sndGameOver();
+      if (score > hi) { hi = score; localStorage.setItem('cascade_hi', String(hi)); }
+      if (maxCombo > parseInt(localStorage.getItem('cascade_mc')||'0',10)) localStorage.setItem('cascade_mc', String(maxCombo));
+    }
+  }
+
+  // shake
+  var sx = 0, sy = 0;
+  if (shakeTimer > 0) {
+    shakeTimer -= dt;
+    sx = (Math.random()-0.5)*shakeX*2; sy = (Math.random()-0.5)*shakeY*2;
+  }
+
+  // draw
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  // bg
+  var grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,CFG.BG_TOP); grad.addColorStop(1,CFG.BG_BOT);
+  ctx.fillStyle = grad; ctx.fillRect(-10,-10,W+20,H+20);
+
+  // grid lines
+  ctx.strokeStyle = CFG.GRID_LINE; ctx.lineWidth = 1;
+  var gc, gr2;
+  for (gc = 0; gc <= CFG.COLS; gc++) {
+    ctx.beginPath();
+    ctx.moveTo(gridOX+gc*cellSz, gridOY);
+    ctx.lineTo(gridOX+gc*cellSz, gridOY+CFG.ROWS*cellSz);
+    ctx.stroke();
+  }
+  for (gr2 = 0; gr2 <= CFG.ROWS; gr2++) {
+    ctx.beginPath();
+    ctx.moveTo(gridOX, gridOY+gr2*cellSz);
+    ctx.lineTo(gridOX+CFG.COLS*cellSz, gridOY+gr2*cellSz);
+    ctx.stroke();
+  }
+
+  // danger zone highlight row 0
+  ctx.fillStyle = 'rgba(255,0,0,0.03)';
+  ctx.fillRect(gridOX, gridOY, CFG.COLS*cellSz, cellSz);
+
+  // process animations
+  var i, a, p, bRef, exX, exY, exR, alpha;
+  for (i = anims.length-1; i >= 0; i--) {
+    a = anims[i];
+    p = Math.min(1, (now - a.t0) / a.dur);
+    if (a.type === 'drop') {
+      bRef = a.ball;
+      bRef.y = a.data.fromY + (a.data.toY - a.data.fromY) * easeOut(p);
+    } else if (a.type === 'merge') {
+      bRef = a.ball;
+      if (p < 0.5) bRef.scale = 1 + 0.4 * (p/0.5);
+      else bRef.scale = 1.4 - 0.4 * ((p-0.5)/0.5);
+    } else if (a.type === 'explode') {
+      exX = a.data.x; exY = a.data.y;
+      exR = 10 + 60 * p; alpha = 1 - p;
+      ctx.save(); ctx.globalAlpha = alpha * 0.8;
+      ctx.beginPath(); ctx.arc(exX+gridOX, exY+gridOY, exR, 0, Math.PI*2);
+      var eGrad = ctx.createRadialGradient(exX+gridOX,exY+gridOY,0,exX+gridOX,exY+gridOY,exR);
+      eGrad.addColorStop(0, a.data.color); eGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = eGrad; ctx.fill(); ctx.restore();
+    } else if (a.type === 'fragLand') {
+      bRef = a.ball;
+      bRef.x = bRef.col * cellSz; bRef.y = bRef.row * cellSz;
+      if (p < 0.5) bRef.scale = 1.5 - p;
+      else bRef.scale = 1;
+    } else if (a.type === 'vibWarn') {
+      // all balls tremble
+      for (var vi = 0; vi < balls.length; vi++) {
+        if (balls[vi].level < 3) {
+          balls[vi].scale = 0.95 + 0.1 * Math.sin(now / 25);
+        }
+      }
+    }
+    if (p >= 1) {
+      a.done = true;
+      if (a.ball) { a.ball.scale = 1; a.ball.anim = null; }
+    }
+  }
+  anims = anims.filter(function(a){ return !a.done; });
+
+  // draw balls
+  for (i = 0; i < balls.length; i++) drawBall(balls[i], now);
+
+  // preview
+  ctx.save();
+  ctx.fillStyle = '#ccc'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('下一个', W/2, 18);
+  ctx.beginPath(); ctx.arc(W/2, 36, 12, 0, Math.PI*2);
+  ctx.fillStyle = CFG.COLORS[nextCI]; ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.restore();
+
+  // score UI
+  ctx.save();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('分数: ' + score, 12, 24);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#aaa'; ctx.font = '14px sans-serif';
+  ctx.fillText('最高: ' + hi, W - 12, 24);
+  ctx.restore();
+
+  // combo
+  if (combo > 1 && state !== 'gameover') {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.fillStyle = '#FFD700';
+    var comboY = gridOY + CFG.ROWS * cellSz + 28;
+    ctx.fillText('COMBO x' + combo, W/2, comboY);
+    ctx.restore();
+  }
+
+  // vibrate indicator
+  if (state === 'idle' && !gameOver) {
+    var pct = vibrateAcc / CFG.VIB_INTERVAL;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    var barW = 60, barH = 4;
+    var barX = W/2 - barW/2, barY = gridOY + CFG.ROWS * cellSz + 8;
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.fillStyle = 'rgba(255,200,50,0.5)';
+    ctx.fillRect(barX, barY, barW * pct, barH);
+    ctx.restore();
+  }
+
+  // game over screen
+  if (gameOver) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#FF4757'; ctx.font = 'bold 36px sans-serif';
+    ctx.fillText('游戏结束', W/2, H/2 - 60);
+    ctx.fillStyle = '#fff'; ctx.font = '24px sans-serif';
+    ctx.fillText('分数: ' + score, W/2, H/2 - 10);
+    ctx.fillStyle = '#aaa'; ctx.font = '18px sans-serif';
+    ctx.fillText('最高: ' + hi + '  最高连击: ' + maxCombo, W/2, H/2 + 25);
+    // restart button
+    var bx = W/2-80, by = H/2+50, bw = 160, bh = 50;
+    ctx.fillStyle = '#3742FA';
+    roundRect(ctx, bx, by, bw, bh, 12); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 20px sans-serif';
+    ctx.fillText('再来一局', W/2, by + 32);
+    ctx.restore();
+  }
+
+  // start screen
+  if (state === 'start') {
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#2ED573'; ctx.font = 'bold 32px sans-serif';
+    ctx.fillText('Cascade', W/2, H/2 - 50);
+    ctx.fillStyle = '#ECCC68'; ctx.font = '18px sans-serif';
+    ctx.fillText('爆裂连锁', W/2, H/2 - 18);
+    ctx.fillStyle = '#ccc'; ctx.font = '16px sans-serif';
+    ctx.fillText('点击放球 · 同色合并 · 最大爆炸', W/2, H/2 + 20);
+    var sbx = W/2-80, sby = H/2+50, sbw = 160, sbh = 50;
+    ctx.fillStyle = '#FF4757';
+    roundRect(ctx, sbx, sby, sbw, sbh, 12); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 20px sans-serif';
+    ctx.fillText('开始游戏', W/2, sby + 32);
+    ctx.restore();
+  }
+
+  ctx.restore(); // shake
+}
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x+r,y); c.lineTo(x+w-r,y); c.quadraticCurveTo(x+w,y,x+w,y+r);
+  c.lineTo(x+w,y+h-r); c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  c.lineTo(x+r,y+h); c.quadraticCurveTo(x,y+h,x,y+h-r);
+  c.lineTo(x,y+r); c.quadraticCurveTo(x,y,x+r,y);
+  c.closePath();
+}
+
+/* ===== INPUT ===== */
+function handleTap(px, py) {
+  ensureAudio();
+  if (state === 'start') {
+    state = 'idle'; return;
+  }
+  if (gameOver) {
+    // check restart button
+    var bx = W/2-80, by = H/2+50, bw = 160, bh = 50;
+    if (px >= bx && px <= bx+bw && py >= by && py <= by+bh) {
+      initState(); state = 'idle';
+    }
+    return;
+  }
+  var x = px - gridOX;
+  var col = Math.floor(x / cellSz);
+  if (col >= 0 && col < CFG.COLS) dropBall(col);
+}
+
+canvas.addEventListener('touchstart', function(e) {
+  e.preventDefault();
+  var t = e.touches[0];
+  handleTap(t.clientX, t.clientY);
+}, {passive:false});
+
+canvas.addEventListener('click', function(e) {
+  handleTap(e.clientX, e.clientY);
+});
+
+/* ===== INIT ===== */
+initState();
+state = 'start';
+requestAnimationFrame(loop);
 
 })();
 </script>
