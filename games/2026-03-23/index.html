@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>色界竞技场</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0A0A1A; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+canvas { border-radius: 8px; }
+</style>
+</head>
+<body>
+<canvas id="game" width="800" height="600"></canvas>
+<script>
+(function() {
+  'use strict';
+
+  // ═══════════════ 常量 ═══════════════
+  const COLORS = ['#FF4444', '#4488FF', '#FFDD44'];
+  const COLOR_NAMES = ['红', '蓝', '黄'];
+  const ARENA_CX = 400;
+  const ARENA_CY = 300;
+  const ARENA_R = 280;
+  const PLAYER_R = 12;
+  const ENEMY_R = 10;
+  const PU_SIZE = 16;
+  const SWITCH_CD = 30; // 0.5s @60fps
+  const GRID = 40;
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  // ═══════════════ 工具函数 ═══════════════
+  function dist(x1, y1, x2, y2) {
+    return Math.sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
+  }
+
+  function distObj(a, b) {
+    return dist(a.x, a.y, b.x, b.y);
+  }
+
+  function rectsOverlap(a, b) {
+    return a.x < b.x + b.width && a.x + a.width > b.x &&
+           a.y < b.y + b.height && a.y + a.height > b.y;
+  }
+
+  function isInsideArena(wall) {
+    var corners = [
+      [wall.x, wall.y],
+      [wall.x + wall.width, wall.y],
+      [wall.x, wall.y + wall.height],
+      [wall.x + wall.width, wall.y + wall.height]
+    ];
+    for (var i = 0; i < corners.length; i++) {
+      if (dist(corners[i][0], corners[i][1], ARENA_CX, ARENA_CY) > ARENA_R - 5) return false;
+    }
+    return true;
+  }
+
+  function pointInRect(px, py, r) {
+    return px >= r.x && px <= r.x + r.width && py >= r.y && py <= r.y + r.height;
+  }
+
+  function circleRectOverlap(cx, cy, cr, rx, ry, rw, rh) {
+    var nearestX = Math.max(rx, Math.min(cx, rx + rw));
+    var nearestY = Math.max(ry, Math.min(cy, ry + rh));
+    var dx = cx - nearestX;
+    var dy = cy - nearestY;
+    return (dx * dx + dy * dy) < (cr * cr);
+  }
+
+  function clampToArena(x, y, r) {
+    var d = dist(x, y, ARENA_CX, ARENA_CY);
+    var maxD = ARENA_R - r;
+    if (d > maxD) {
+      var angle = Math.atan2(y - ARENA_CY, x - ARENA_CX);
+      return { x: ARENA_CX + Math.cos(angle) * maxD, y: ARENA_CY + Math.sin(angle) * maxD };
+    }
+    return { x: x, y: y };
+  }
+
+  // ═══════════════ 随机生成 ═══════════════
+  function generateWall(existingWalls) {
+    var attempts = 0;
+    while (attempts < 50) {
+      attempts++;
+      var isH = Math.random() < 0.5;
+      var len = (3 + Math.floor(Math.random() * 4)) * GRID;
+      var ci = Math.floor(Math.random() * 3);
+      var angle = Math.random() * Math.PI * 2;
+      var d = Math.random() * 200 + 50;
+      var cx = ARENA_CX + Math.cos(angle) * d;
+      var cy = ARENA_CY + Math.sin(angle) * d;
+      var w = isH ? len : GRID;
+      var h = isH ? GRID : len;
+      var wx = cx - w / 2;
+      var wy = cy - h / 2;
+      var wall = { x: wx, y: wy, width: w, height: h, colorIndex: ci };
+
+      var overlaps = false;
+      for (var i = 0; i < existingWalls.length; i++) {
+        if (rectsOverlap(wall, existingWalls[i])) { overlaps = true; break; }
+      }
+      if (overlaps) continue;
+      if (!isInsideArena(wall)) continue;
+      return wall;
+    }
+    return null;
+  }
+
+  function generateEnemyAtDist(minDistFromPlayer) {
+    var attempts = 0;
+    while (attempts < 100) {
+      attempts++;
+      var angle = Math.random() * Math.PI * 2;
+      var d = Math.random() * 200 + 100;
+      var ex = ARENA_CX + Math.cos(angle) * d;
+      var ey = ARENA_CY + Math.sin(angle) * d;
+      if (dist(ex, ey, ARENA_CX, ARENA_CY) > 270) continue;
+      if (dist(ex, ey, player.x, player.y) < minDistFromPlayer) continue;
+      return { x: ex, y: ey, colorIndex: Math.floor(Math.random() * 3) };
+    }
+    return null;
+  }
+
+  function generatePowerUp() {
+    var attempts = 0;
+    while (attempts < 100) {
+      attempts++;
+      var angle = Math.random() * Math.PI * 2;
+      var d = Math.random() * 220 + 40;
+      var px = ARENA_CX + Math.cos(angle) * d;
+      var py = ARENA_CY + Math.sin(angle) * d;
+      if (dist(px, py, ARENA_CX, ARENA_CY) > 260) continue;
+      var inWall = false;
+      for (var i = 0; i < walls.length; i++) {
+        if (pointInRect(px, py, walls[i])) { inWall = true; break; }
+      }
+      if (inWall) continue;
+      return { x: px, y: py, colorIndex: Math.floor(Math.random() * 3) };
+    }
+    return null;
+  }
+
+  // ═══════════════ 粒子系统 ═══════════════
+  var particles = [];
+
+  function spawnParticles(x, y, color) {
+    for (var i = 0; i < 12; i++) {
+      if (particles.length >= 100) return;
+      var angle = (Math.PI * 2 / 12) * i + Math.random() * 0.5;
+      var spd = 2 + Math.random() * 3;
+      particles.push({
+        x: x, y: y,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd,
+        life: 30, color: color, radius: 3
+      });
+    }
+  }
+
+  function updateParticles() {
+    for (var i = particles.length - 1; i >= 0; i--) {
+      var p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life--;
+      p.radius *= 0.95;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  function renderParticles() {
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      var alpha = p.life / 30;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ═══════════════ 输入系统 ═══════════════
+  var keys = {};
+  var canvasClicked = false;
+
+  document.addEventListener('keydown', function(e) {
+    keys[e.key.toLowerCase()] = true;
+    if (e.key.toLowerCase() === 'q') attemptColorSwitch();
+  });
+  document.addEventListener('keyup', function(e) {
+    keys[e.key.toLowerCase()] = false;
+  });
+
+  canvas.addEventListener('click', function(e) {
+    canvasClicked = true;
+  });
+
+  function getPlayerMovement() {
+    var dx = 0, dy = 0;
+    if (keys['w'] || keys['arrowup']) dy -= 1;
+    if (keys['s'] || keys['arrowdown']) dy += 1;
+    if (keys['a'] || keys['arrowleft']) dx -= 1;
+    if (keys['d'] || keys['arrowright']) dx += 1;
+    if (dx !== 0 && dy !== 0) {
+      dx *= 0.707;
+      dy *= 0.707;
+    }
+    return { dx: dx, dy: dy };
+  }
+
+  function attemptColorSwitch() {
+    if (gameState !== 'PLAYING') return;
+    if (player.colorSwitchCooldown <= 0) {
+      player.colorIndex = (player.colorIndex + 1) % 3;
+      player.colorSwitchCooldown = SWITCH_CD;
+      player.switchFlash = 12; // flash frames
+    }
+  }
+
+  // ═══════════════ 游戏状态 ═══════════════
+  var gameState = 'MENU';
+  var score = 0;
+  var survivalFrames = 0;
+  var killCount = 0;
+  var collectCount = 0;
+  var enemySpawnTimer = 0;
+  var puSpawnTimer = 0;
+  var wallSpawnTimer = 0;
+  var difficultyFrames = 0;
+  var enemySpeedMult = 1.0;
+
+  var player = {};
+  var enemies = [];
+  var walls = [];
+  var powerUps = [];
+
+  function resetGame() {
+    player = {
+      x: ARENA_CX, y: ARENA_CY,
+      radius: PLAYER_R, speed: 3,
+      colorIndex: 0, colorSwitchCooldown: 0,
+      hp: 3, pulsePhase: 0, switchFlash: 0
+    };
+    enemies = [];
+    walls = [];
+    powerUps = [];
+    particles = [];
+    score = 0;
+    survivalFrames = 0;
+    killCount = 0;
+    collectCount = 0;
+    enemySpawnTimer = 0;
+    puSpawnTimer = 0;
+    wallSpawnTimer = 0;
+    difficultyFrames = 0;
+    enemySpeedMult = 1.0;
+
+    // Initial walls (3)
+    for (var i = 0; i < 3; i++) {
+      var w = generateWall(walls);
+      if (w) walls.push(w);
+    }
+    // Initial enemies (2)
+    for (var j = 0; j < 2; j++) {
+      var eg = generateEnemyAtDist(200);
+      if (eg) enemies.push({
+        x: eg.x, y: eg.y, radius: ENEMY_R, colorIndex: eg.colorIndex,
+        baseSpeed: 2.5, speedMultiplier: 1.0,
+        alive: true, respawnTimer: 0, trail: []
+      });
+    }
+    // Initial powerups (3, one per color)
+    for (var k = 0; k < 3; k++) {
+      var pu = generatePowerUp();
+      if (pu) powerUps.push({
+        x: pu.x, y: pu.y, colorIndex: pu.colorIndex,
+        size: PU_SIZE, rotation: Math.random() * Math.PI * 2,
+        lifetime: 1800, pulsePhase: Math.random() * Math.PI * 2
+      });
+    }
+  }
+
+  // ═══════════════ 更新逻辑 ═══════════════
+  function update() {
+    survivalFrames++;
+    score += 1 / 60;
+
+    // Player movement
+    var mv = getPlayerMovement();
+    var nextX = player.x + mv.dx * player.speed;
+    var nextY = player.y + mv.dy * player.speed;
+
+    // Arena boundary
+    var clamped = clampToArena(nextX, nextY, player.radius);
+    nextX = clamped.x;
+    nextY = clamped.y;
+
+    // Wall collision for player
+    var blocked = false;
+    for (var wi = 0; wi < walls.length; wi++) {
+      var w = walls[wi];
+      if (player.colorIndex !== w.colorIndex) {
+        if (circleRectOverlap(nextX, nextY, player.radius, w.x, w.y, w.width, w.height)) {
+          blocked = true;
+          break;
+        }
+      }
+    }
+    if (!blocked) {
+      player.x = nextX;
+      player.y = nextY;
+    }
+
+    // Color switch cooldown
+    if (player.colorSwitchCooldown > 0) player.colorSwitchCooldown--;
+    if (player.switchFlash > 0) player.switchFlash--;
+    player.pulsePhase += 0.125; // ~0.5s period at 60fps
+
+    // Update enemies
+    for (var ei = 0; ei < enemies.length; ei++) {
+      var e = enemies[ei];
+      if (!e.alive) {
+        e.respawnTimer--;
+        if (e.respawnTimer <= 0) {
+          var regen = generateEnemyAtDist(200);
+          if (regen) {
+            e.x = regen.x;
+            e.y = regen.y;
+            e.colorIndex = regen.colorIndex;
+            e.alive = true;
+            e.speedMultiplier = enemySpeedMult;
+            e.trail = [];
+          }
+        }
+        continue;
+      }
+
+      // Trail
+      e.trail.push({ x: e.x, y: e.y });
+      if (e.trail.length > 5) e.trail.shift();
+
+      // AI: move toward player
+      var edx = player.x - e.x;
+      var edy = player.y - e.y;
+      var elen = dist(player.x, player.y, e.x, e.y);
+      if (elen < 1) elen = 1;
+      edx /= elen;
+      edy /= elen;
+
+      var spd = e.baseSpeed * e.speedMultiplier;
+      if (e.colorIndex === player.colorIndex) spd *= 1.3;
+
+      var enextX = e.x + edx * spd;
+      var enextY = e.y + edy * spd;
+
+      // Clamp to arena
+      var ecl = clampToArena(enextX, enextY, e.radius);
+      enextX = ecl.x;
+      enextY = ecl.y;
+
+      // Wall collision for enemy
+      var eBlocked = false;
+      for (var ewi = 0; ewi < walls.length; ewi++) {
+        var ew = walls[ewi];
+        if (e.colorIndex !== ew.colorIndex) {
+          if (circleRectOverlap(enextX, enextY, e.radius, ew.x, ew.y, ew.width, ew.height)) {
+            eBlocked = true;
+            break;
+          }
+        }
+      }
+      if (!eBlocked) {
+        e.x = enextX;
+        e.y = enextY;
+      }
+    }
+
+    // Player vs Enemy collision
+    for (var ci = 0; ci < enemies.length; ci++) {
+      var ec = enemies[ci];
+      if (!ec.alive) continue;
+      if (distObj(player, ec) < player.radius + ec.radius) {
+        if (player.colorIndex === ec.colorIndex) {
+          // Kill
+          ec.alive = false;
+          ec.respawnTimer = 300;
+          score += 50;
+          killCount++;
+          spawnParticles(ec.x, ec.y, COLORS[ec.colorIndex]);
+        } else {
+          // Take damage
+          player.hp--;
+          if (player.hp <= 0) {
+            gameState = 'GAME_OVER';
+            return;
+          }
+          // Knockback enemy
+          var bAngle = Math.atan2(ec.y - player.y, ec.x - player.x);
+          ec.x += Math.cos(bAngle) * 30;
+          ec.y += Math.sin(bAngle) * 30;
+          var ecl2 = clampToArena(ec.x, ec.y, ec.radius);
+          ec.x = ecl2.x;
+          ec.y = ecl2.y;
+        }
+      }
+    }
+
+    // Player vs PowerUp
+    for (var pi = powerUps.length - 1; pi >= 0; pi--) {
+      var pu = powerUps[pi];
+      if (distObj(player, pu) < player.radius + pu.size) {
+        if (player.colorIndex === pu.colorIndex) {
+          score += 10;
+          collectCount++;
+          spawnParticles(pu.x, pu.y, COLORS[pu.colorIndex]);
+          powerUps.splice(pi, 1);
+          continue;
+        }
+      }
+      pu.lifetime--;
+      pu.rotation += 0.02;
+      pu.pulsePhase += 0.1;
+      if (pu.lifetime <= 0) powerUps.splice(pi, 1);
+    }
+
+    // Spawning
+    enemySpawnTimer++;
+    var spawnInterval = Math.max(300, 600 - Math.floor(difficultyFrames / 1800) * 50);
+    var aliveCount = 0;
+    for (var ac = 0; ac < enemies.length; ac++) { if (enemies[ac].alive) aliveCount++; }
+    if (enemySpawnTimer >= spawnInterval && aliveCount < 20) {
+      var ne = generateEnemyAtDist(200);
+      if (ne) enemies.push({
+        x: ne.x, y: ne.y, radius: ENEMY_R, colorIndex: ne.colorIndex,
+        baseSpeed: 2.5, speedMultiplier: enemySpeedMult,
+        alive: true, respawnTimer: 0, trail: []
+      });
+      enemySpawnTimer = 0;
+    }
+
+    puSpawnTimer++;
+    if (puSpawnTimer >= 300 && powerUps.length < 10) {
+      var npu = generatePowerUp();
+      if (npu) powerUps.push({
+        x: npu.x, y: npu.y, colorIndex: npu.colorIndex,
+        size: PU_SIZE, rotation: Math.random() * Math.PI * 2,
+        lifetime: 1800, pulsePhase: 0
+      });
+      puSpawnTimer = 0;
+    }
+
+    wallSpawnTimer++;
+    if (wallSpawnTimer >= 1200 && walls.length < 15) {
+      var nw = generateWall(walls);
+      if (nw) walls.push(nw);
+      wallSpawnTimer = 0;
+    }
+
+    // Difficulty
+    difficultyFrames++;
+    if (difficultyFrames % 1800 === 0) {
+      enemySpeedMult = Math.min(2.0, enemySpeedMult + 0.1);
+      for (var di = 0; di < enemies.length; di++) {
+        enemies[di].speedMultiplier = enemySpeedMult;
+      }
+    }
+
+    updateParticles();
+  }
+
+  // ═══════════════ 渲染 ═══════════════
+  function renderBackground() {
+    ctx.fillStyle = '#1A1A2E';
+    ctx.fillRect(0, 0, 800, 600);
+
+    // Arena circle
+    ctx.fillStyle = '#0F0F23';
+    ctx.beginPath();
+    ctx.arc(ARENA_CX, ARENA_CY, ARENA_R, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Arena border
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ARENA_CX, ARENA_CY, ARENA_R, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function renderWalls() {
+    for (var i = 0; i < walls.length; i++) {
+      var w = walls[i];
+      var col = COLORS[w.colorIndex];
+      ctx.fillStyle = col.replace(')', ',0.4)').replace('rgb', 'rgba');
+      // Hex to rgba
+      var r = parseInt(col.substr(1, 2), 16);
+      var g = parseInt(col.substr(3, 2), 16);
+      var b = parseInt(col.substr(5, 2), 16);
+      ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.4)';
+      ctx.fillRect(w.x, w.y, w.width, w.height);
+      ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',0.8)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(w.x, w.y, w.width, w.height);
+    }
+  }
+
+  function renderPowerUps() {
+    for (var i = 0; i < powerUps.length; i++) {
+      var pu = powerUps[i];
+      var col = COLORS[pu.colorIndex];
+
+      // Pulse glow
+      var glowR = pu.size + 6 * Math.sin(pu.pulsePhase);
+      var gr = parseInt(col.substr(1, 2), 16);
+      var gg = parseInt(col.substr(3, 2), 16);
+      var gb = parseInt(col.substr(5, 2), 16);
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.arc(pu.x, pu.y, glowR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // Diamond
+      ctx.save();
+      ctx.translate(pu.x, pu.y);
+      ctx.rotate(pu.rotation);
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(0, -pu.size);
+      ctx.lineTo(pu.size, 0);
+      ctx.lineTo(0, pu.size);
+      ctx.lineTo(-pu.size, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function renderEnemies() {
+    for (var i = 0; i < enemies.length; i++) {
+      var e = enemies[i];
+      if (!e.alive) continue;
+
+      // Trail
+      for (var ti = 0; ti < e.trail.length; ti++) {
+        var t = e.trail[ti];
+        ctx.globalAlpha = (ti + 1) * 0.08;
+        ctx.fillStyle = COLORS[e.colorIndex];
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, e.radius * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // Body
+      ctx.fillStyle = COLORS[e.colorIndex];
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Spikes
+      var spikeCount = 8;
+      for (var si = 0; si < spikeCount; si++) {
+        var a = (Math.PI * 2 / spikeCount) * si;
+        var baseX = e.x + Math.cos(a) * e.radius;
+        var baseY = e.y + Math.sin(a) * e.radius;
+        var tipX = e.x + Math.cos(a) * (e.radius + 6);
+        var tipY = e.y + Math.sin(a) * (e.radius + 6);
+        var perpA = a + Math.PI / 2;
+        var bw = 3;
+        ctx.fillStyle = COLORS[e.colorIndex];
+        ctx.beginPath();
+        ctx.moveTo(baseX + Math.cos(perpA) * bw, baseY + Math.sin(perpA) * bw);
+        ctx.lineTo(tipX, tipY);
+        ctx.lineTo(baseX - Math.cos(perpA) * bw, baseY - Math.sin(perpA) * bw);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+
+  function renderPlayer() {
+    var p = player;
+
+    // Flash effect on color switch
+    if (p.switchFlash > 0) {
+      ctx.globalAlpha = 0.4;
+      ctx.fillStyle = COLORS[p.colorIndex];
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius + 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // Pulse ring
+    var pulseR = p.radius + 4 * Math.sin(p.pulsePhase);
+    ctx.strokeStyle = COLORS[p.colorIndex];
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, pulseR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // White body
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function renderUI() {
+    // Top-left: color name
+    var col = COLORS[player.colorIndex];
+    ctx.fillStyle = col;
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('色界: ' + COLOR_NAMES[player.colorIndex], 20, 30);
+
+    // Cooldown indicator
+    if (player.colorSwitchCooldown > 0) {
+      ctx.fillStyle = '#888';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('冷却中...', 20, 50);
+    }
+
+    // Top-center: score
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 24px monospace';
+    ctx.textAlign = 'center';
+    var displayScore = Math.floor(score);
+    if (!isFinite(displayScore)) displayScore = 0;
+    ctx.fillText('得分: ' + displayScore, 400, 30);
+
+    // Top-right: HP
+    ctx.textAlign = 'right';
+    ctx.font = '24px sans-serif';
+    var hpStr = '';
+    for (var i = 0; i < 3; i++) {
+      hpStr += (i < player.hp) ? '♥ ' : '♡ ';
+    }
+    ctx.fillStyle = '#FF4444';
+    ctx.fillText(hpStr, 780, 30);
+
+    // Bottom: survival time and stats
+    var survSec = Math.floor(survivalFrames / 60);
+    if (!isFinite(survSec)) survSec = 0;
+    var mins = Math.floor(survSec / 60);
+    var secs = survSec % 60;
+    var timeStr = mins + ':' + (secs < 10 ? '0' : '') + secs;
+
+    ctx.fillStyle = '#888888';
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('存活: ' + timeStr + '    击杀: ' + killCount + '    道具: ' + collectCount, 400, 588);
+
+    // Color switch cooldown bar at bottom
+    if (player.colorSwitchCooldown > 0) {
+      var barW = 100;
+      var barH = 4;
+      var barX = 350;
+      var barY = 595;
+      var fill = player.colorSwitchCooldown / SWITCH_CD;
+      ctx.fillStyle = '#333';
+      ctx.fillRect(barX, barY, barW, barH);
+      ctx.fillStyle = COLORS[player.colorIndex];
+      ctx.fillRect(barX, barY, barW * (1 - fill), barH);
+    }
+  }
+
+  function renderMenu() {
+    renderBackground();
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 36px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('色界竞技场', 400, 200);
+
+    ctx.fillStyle = '#AAAAAA';
+    ctx.font = '16px sans-serif';
+    ctx.fillText('方向键 / WASD 移动', 400, 280);
+    ctx.fillText('Q 切换颜色（红→蓝→黄）', 400, 310);
+    ctx.fillText('同色墙可穿过，同色敌人可击杀', 400, 340);
+
+    // Start button
+    ctx.fillStyle = '#4488FF';
+    roundRect(300, 400, 200, 50, 10);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText('开始游戏', 400, 432);
+
+    ctx.fillStyle = '#666';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('点击按钮或按任意键开始', 400, 480);
+  }
+
+  function renderGameOver() {
+    renderBackground();
+    // Dim overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, 800, 600);
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 36px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('游戏结束', 400, 180);
+
+    var survSec = Math.floor(survivalFrames / 60);
+    if (!isFinite(survSec)) survSec = 0;
+    var mins = Math.floor(survSec / 60);
+    var secs = survSec % 60;
+    var timeStr = mins + '分' + (secs < 10 ? '0' : '') + secs + '秒';
+
+    ctx.font = '20px sans-serif';
+    ctx.fillStyle = '#CCCCCC';
+    ctx.fillText('最终得分: ' + Math.floor(score), 400, 250);
+    ctx.fillText('存活时间: ' + timeStr, 400, 285);
+    ctx.fillText('击杀敌人: ' + killCount, 400, 320);
+    ctx.fillText('收集道具: ' + collectCount, 400, 355);
+
+    // Restart button
+    ctx.fillStyle = '#4488FF';
+    roundRect(300, 420, 200, 50, 10);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText('再来一局', 400, 452);
+  }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  // ═══════════════ 主循环 ═══════════════
+  var lastKeyWasQ = false;
+
+  // Detect any key press for menu
+  document.addEventListener('keydown', function(e) {
+    if (gameState === 'MENU') {
+      gameState = 'PLAYING';
+      resetGame();
+    }
+  });
+
+  canvas.addEventListener('click', function(e) {
+    var rect = canvas.getBoundingClientRect();
+    var mx = e.clientX - rect.left;
+    var my = e.clientY - rect.top;
+
+    if (gameState === 'MENU') {
+      // Check start button
+      if (mx >= 300 && mx <= 500 && my >= 400 && my <= 450) {
+        gameState = 'PLAYING';
+        resetGame();
+      }
+    } else if (gameState === 'GAME_OVER') {
+      // Check restart button
+      if (mx >= 300 && mx <= 500 && my >= 420 && my <= 470) {
+        gameState = 'PLAYING';
+        resetGame();
+      }
+    }
+  });
+
+  function gameLoop() {
+    if (gameState === 'PLAYING') {
+      update();
+      renderBackground();
+      renderWalls();
+      renderPowerUps();
+      renderEnemies();
+      renderPlayer();
+      renderParticles();
+      renderUI();
+    } else if (gameState === 'GAME_OVER') {
+      renderGameOver();
+    } else {
+      renderMenu();
+    }
+    requestAnimationFrame(gameLoop);
+  }
+
+  // ═══════════════ 启动 ═══════════════
+  resetGame();
+  gameState = 'MENU';
+  gameLoop();
+
+})();
+</script>
+</body>
+</html>
