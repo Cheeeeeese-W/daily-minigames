@@ -219,7 +219,10 @@ function applyColumnGravity(col) {
             var ball = grid[col][above];
             grid[col][above] = null;
             grid[col][r] = ball;
+            ball.col = col;
             ball.row = r;
+            ball.x = col * cellSz;
+            ball.y = r * cellSz;
             ball.tgtY = r * cellSz;
             if (ball.level >= 3) {
               if (col+1 < CFG.COLS) {
