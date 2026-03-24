@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Bubble Split</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a1a;touch-action:none;-webkit-tap-highlight-color:transparent}
+canvas{display:block;width:100%;height:100%}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+(function(){
+'use strict';
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, DPR;
+const STATUS_H = 48;
+const GAME_OVER_Y_RATIO = 587/667;
+const GRAVITY = 600;
+const FRICTION = 0.99;
+const RESTITUTION = 0.85;
+const PIN_SPEED = 900;
+
+const LEVELS = [
+  {color:'#74b9ff',r:20,  score:1},
+  {color:'#a29bfe',r:28,  score:3},
+  {color:'#fd79a8',r:38,  score:9},
+  {color:'#fdcb6e',r:52,  score:27},
+  {color:'#00b894',r:70,  score:81},
+  {color:'#e17055',r:92,  score:243},
+  {color:'#d63031',r:120, score:729},
+  {color:'#636e72',r:155, score:2187},
+  {color:'#2d3436',r:190, score:6561},
+  {color:'#ffeaa7',r:200, score:20000,isGold:true}
+];
+
+let state, score, bestScore, bubbles, pins, particles, floatingTexts;
+let chainCount, lastChainTime, lastSpawnTime;
+let maxLevel = 2; // track current highest level for spawning
+let audioCtx = null;
+
+function initAudio(){
+  try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+}
+
+function playTone(freq,endFreq,dur,type='sine',vol=0.15){
+  if(!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(endFreq, audioCtx.currentTime + dur);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+  osc.start();
+  osc.stop(audioCtx.currentTime + dur);
+}
+
+function playPop(level){
+  const base = 400 + level * 80;
+  playTone(base, base * 0.3, 0.08, 'sine', 0.12);
+}
+
+function playChain(chain){
+  const f = 500 + chain * 100;
+  playTone(f, f * 1.2, 0.06, 'square', 0.08);
+}
+
+function playExplosion(){
+  playTone(100, 20, 0.3, 'sawtooth', 0.2);
+}
+
+function resize(){
+  DPR = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.scale(DPR, DPR);
+}
+
+function getGameOverY(){
+  return H * GAME_OVER_Y_RATIO;
+}
+
+function startGame(){
+  score = 0;
+  bestScore = parseInt(localStorage.getItem('bubble_split_best')||'0');
+  bubbles = [];
+  pins = [];
+  particles = [];
+  floatingTexts = [];
+  chainCount = 0;
+  lastChainTime = 0;
+  lastSpawnTime = 0;
+  maxLevel = 2;
+  state = 'playing';
+  for(let i=0;i<3;i++) spawnBubble(true);
+}
+
+function spawnBubble(initial){
+  let lvl;
+  if(initial){
+    // Initial bubbles: Lv2~Lv3
+    lvl = Math.random() < 0.5 ? 2 : 3;
+  } else {
+    // Track current highest level, spawn within [1, maxLevel+1]
+    const possibleMax = Math.min(9, maxLevel + 1);
+    if(Math.random() < 0.4 && maxLevel < 9){
+      // 40% chance to spawn above current max (climbing)
+      lvl = Math.random() < 0.6 ? maxLevel + 1 : maxLevel;
+    } else {
+      // Normal spawn: Lv1 to current max
+      lvl = Math.floor(Math.random() * Math.min(maxLevel, 9)) + 1;
+    }
+  }
+  const edge = Math.floor(Math.random()*4);
+  let x, y, vx, vy;
+  const r = LEVELS[lvl].r;
+  const speed = 30;
+  if(edge===0){x=Math.random()*W;y=-r;vx=(Math.random()-0.5)*speed;vy=Math.random()*speed*0.5}
+  else if(edge===1){x=W+r;y=Math.random()*(getGameOverY()-STATUS_H)+STATUS_H;vx=-(Math.random()*0.5+0.5)*speed;vy=(Math.random()-0.5)*speed*0.3}
+  else if(edge===2){x=Math.random()*W;y=getGameOverY()+r;vx=(Math.random()-0.5)*speed;vy=-(Math.random()*0.5+0.5)*speed}
+  else{x=-r;y=Math.random()*(getGameOverY()-STATUS_H)+STATUS_H;vx=(Math.random()*0.5+0.5)*speed;vy=(Math.random()-0.5)*speed*0.3}
+  bubbles.push({x,y,vx,vy,lvl,r,scale:1,alpha:1,flash:0,id:Math.random()});
+}
+
+function addParticles(x,y,color,count){
+  for(let i=0;i<count;i++){
+    const angle = Math.random()*Math.PI*2;
+    const spd = Math.random()*150+50;
+    particles.push({x,y,vx:Math.cos(angle)*spd,vy:Math.sin(angle)*spd,life:1,color,r:Math.random()*4+2});
+  }
+}
+
+function addFloatingText(x,y,text,color){
+  floatingTexts.push({x,y,text,color,life:1,vy:-60});
+}
+
+function splitBubble(b, pin){
+  const lvl = b.lvl;
+  if(lvl<=0) return;
+  // Track maxLevel for spawning progression
+  if(lvl > maxLevel) maxLevel = lvl;
+  const sc = LEVELS[lvl].score;
+  score += sc;
+  addParticles(b.x,b.y,LEVELS[lvl].color,8);
+  addFloatingText(b.x,b.y,'+'+sc,LEVELS[lvl].color);
+  playPop(lvl);
+  chainCount++;
+  lastChainTime = Date.now();
+  if(lvl>=7){
+    const dx = b.x - pin.x;
+    const dy = b.y - pin.y;
+    const nx = -dy, ny = dx;
+    const len = Math.sqrt(nx*nx+ny*ny)||1;
+    const tx = nx/len, ty = ny/len;
+    ctx.save();
+    ctx.shadowBlur=20;ctx.shadowColor=LEVELS[lvl].color;
+    ctx.strokeStyle=LEVELS[lvl].color;ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(b.x-tx*50,b.y-ty*50);ctx.lineTo(b.x+tx*50,b.y+ty*50);ctx.stroke();
+    ctx.restore();
+  }
+  if(lvl===9){
+    playExplosion();
+    score += 20000;
+    addFloatingText(W/2,H/2,'AMAZING! +20000','#ffeaa7');
+    for(let i=bubbles.length-1;i>=0;i--){
+      if(bubbles[i]!==b){score+=LEVELS[bubbles[i].lvl].score;addParticles(bubbles[i].x,bubbles[i].y,LEVELS[bubbles[i].lvl].color,12);}
+    }
+    bubbles=[];
+    flashAlpha=1;
+    return;
+  }
+  if(lvl===0) return;
+  // Upward split: 20% chance to spawn lv+1 (larger bubble) instead of lv-1
+  let nextLvl;
+  if(Math.random() < 0.2 && lvl < 9){
+    nextLvl = lvl + 1;
+    if(nextLvl > maxLevel) maxLevel = nextLvl;
+  } else {
+    nextLvl = lvl - 1;
+  }
+  const nr = LEVELS[nextLvl].r;
+  const ang1 = Math.random()*Math.PI*2;
+  const ang2 = ang1+Math.PI+(Math.random()-0.5)*0.5;
+  const spd = 150+Math.random()*100;
+  bubbles.push({x:b.x+Math.cos(ang1)*10,y:b.y+Math.sin(ang1)*10,vx:Math.cos(ang1)*spd,vy:Math.sin(ang1)*spd-50,lvl:nextLvl,r:nr,scale:1,alpha:1,flash:0,id:Math.random()});
+  bubbles.push({x:b.x+Math.cos(ang2)*10,y:b.y+Math.sin(ang2)*10,vx:Math.cos(ang2)*spd,vy:Math.sin(ang2)*spd-50,lvl:nextLvl,r:nr,scale:1,alpha:1,flash:0,id:Math.random()});
+  for(let i=bubbles.length-1;i>=0;i--){
+    if(bubbles[i]===b){bubbles.splice(i,1);break;}
+  }
+}
+
+let flashAlpha = 0;
+let gameOverTimer = 0;
+let tipTimer = 3;
+let droppingPin = null;
+
+function handleInput(cx,cy){
+  initAudio();
+  if(state==='gameover'){
+    if(Date.now()-gameOverTimer>1000) startGame();
+    return;
+  }
+  if(state!=='playing') return;
+  if(droppingPin) return;
+  tipTimer = -1;
+  droppingPin = {x:cx,y:STATUS_H+10,targetY:cy,vx:0};
+}
+
+canvas.addEventListener('mousedown',e=>{handleInput(e.clientX,e.clientY);});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();handleInput(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
+
+function circleHit(ax,ay,ar,bx,by,br){
+  const dx=ax-bx,dy=ay-by;
+  return dx*dx+dy*dy<(ar+br)*(ar+br);
+}
+
+function closestPointOnSegment(px,py,ax,ay,bx,by){
+  const dx=bx-ax,dy=by-ay,len2=dx*dx+dy*dy;
+  if(len2<0.0001) return {x:ax,y:ay};
+  const t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/len2));
+  return {x:ax+t*dx,y:ay+t*dy};
+}
+
+function pinBubbleCollision(pin){
+  const pinBottom = pin.y;
+  const pinTop = STATUS_H+10;
+  for(let i=bubbles.length-1;i>=0;i--){
+    const b=bubbles[i];
+    const cp=closestPointOnSegment(b.x,b.y,pin.x,pinTop,pin.x,pinBottom);
+    const dx=b.x-cp.x,dy=b.y-cp.y,dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist<b.r+2){
+      let nx=dx/(dist||1),ny=dy/(dist||1);
+      const dot=b.vx*nx+b.vy*ny;
+      if(dot<0){
+        b.vx-=2*dot*nx*RESTITUTION;
+        b.vy-=2*dot*ny*RESTITUTION;
+        b.vx+=nx*50;
+        b.vy+=ny*50;
+      }
+      if(dist<3){
+        splitBubble(b,pin);
+        return;
+      }
+    }
+  }
+}
+
+let lastTime=0;
+let spawnTimer=0;
+
+function update(dt){
+  if(state!=='playing') return;
+  tipTimer = Math.max(-1, tipTimer-dt);
+  if(Date.now()-lastChainTime>800) chainCount=0;
+  spawnTimer+=dt;
+  if(spawnTimer>15){
+    spawnTimer=0;
+    spawnBubble(false);
+  }
+  if(droppingPin){
+    droppingPin.targetY = Math.min(droppingPin.targetY, getGameOverY()-10);
+    const dy = droppingPin.targetY - droppingPin.y;
+    if(Math.abs(dy)<5){
+      pins.push({x:droppingPin.x,y:droppingPin.targetY});
+      droppingPin=null;
+    } else {
+      droppingPin.y += PIN_SPEED * dt;
+      if(droppingPin.y>=getGameOverY()-10){
+        pins.push({x:droppingPin.x,y:getGameOverY()-10});
+        droppingPin=null;
+      }
+    }
+  }
+  for(let i=bubbles.length-1;i>=0;i--){
+    const b=bubbles[i];
+    b.vy+=GRAVITY*dt;
+    b.vx*=FRICTION;
+    b.vy*=FRICTION;
+    b.x+=b.vx*dt;
+    b.y+=b.vy*dt;
+    b.flash=Math.max(0,b.flash-dt*5);
+    if(b.x-b.r<0){b.x=b.r;b.vx=Math.abs(b.vx)*RESTITUTION;}
+    if(b.x+b.r>W){b.x=W-b.r;b.vx=-Math.abs(b.vx)*RESTITUTION;}
+    if(b.y-b.r<STATUS_H){b.y=STATUS_H+b.r;b.vy=Math.abs(b.vy)*RESTITUTION;}
+    if(b.y>b.r+20 && b.y-b.r<STATUS_H){b.y=STATUS_H+b.r;b.vy=Math.abs(b.vy)*RESTITUTION;}
+    if(b.y+b.r>H+50){bubbles.splice(i,1);continue;}
+    if(b.y-b.r>H+50){bubbles.splice(i,1);continue;}
+    if(b.x+b.r>W+50){bubbles.splice(i,1);continue;}
+    if(b.x-b.r<-50){bubbles.splice(i,1);continue;}
+    if(b.lvl===0 && (b.y+b.r>H||b.y-b.r>H||b.x+b.r>W||b.x-b.r<0)){
+      bubbles.splice(i,1);continue;
+    }
+  }
+  for(let i=bubbles.length-1;i>=0;i--){
+    for(let j=i+1;j<bubbles.length;j++){
+      const a=bubbles[i],b=bubbles[j];
+      const dx=b.x-a.x,dy=b.y-a.y,dist=Math.sqrt(dx*dx+dy*dy);
+      const minD=a.r+b.r;
+      if(dist<minD && dist>0.01){
+        const nx=dx/dist,ny=dy/dist,overlap=(minD-dist)*0.5;
+        a.x-=nx*overlap;a.y-=ny*overlap;
+        b.x+=nx*overlap;b.y+=ny*overlap;
+        const dvx=b.vx-a.vx,dvy=b.vy-a.vy,dot=dvx*nx+dvy*ny;
+        if(dot<0){
+          a.vx+=dot*nx*RESTITUTION;a.vy+=dot*ny*RESTITUTION;
+          b.vx-=dot*nx*RESTITUTION;b.vy-=dot*ny*RESTITUTION;
+        }
+      }
+    }
+  }
+  for(const pin of pins){
+    pinBubbleCollision(pin);
+  }
+  const goy = getGameOverY();
+  for(const b of bubbles){
+    if(b.y+b.r>=goy){
+      state='gameover';
+      if(score>bestScore){bestScore=score;localStorage.setItem('bubble_split_best',String(bestScore));}
+      gameOverTimer=Date.now();
+      return;
+    }
+  }
+  if(bubbles.length>30){
+    state='gameover';
+    if(score>bestScore){bestScore=score;localStorage.setItem('bubble_split_best',String(bestScore));}
+    gameOverTimer=Date.now();
+    return;
+  }
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx*dt;p.y+=p.vy*dt;
+    p.vy+=200*dt;
+    p.life-=dt*2;
+    if(p.life<=0) particles.splice(i,1);
+  }
+  for(let i=floatingTexts.length-1;i>=0;i--){
+    const t=floatingTexts[i];
+    t.y+=t.vy*dt;
+    t.life-=dt*1.5;
+    if(t.life<=0) floatingTexts.splice(i,1);
+  }
+  flashAlpha=Math.max(0,flashAlpha-dt*4);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0a0a1a';
+  ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#1a1a2e';
+  ctx.fillRect(0,0,W,STATUS_H);
+  ctx.fillStyle='rgba(255,0,0,0.05)';
+  const goy=getGameOverY();
+  ctx.fillRect(0,goy,H-goy);
+  ctx.strokeStyle='#ff0000';
+  ctx.lineWidth=1;
+  ctx.setLineDash([5,5]);
+  ctx.beginPath();ctx.moveTo(0,goy);ctx.lineTo(W,goy);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle='rgba(255,100,100,0.3)';
+  ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(0,goy-37);ctx.lineTo(W,goy-37);ctx.stroke();
+  for(const pin of pins){
+    ctx.strokeStyle='#e0e0e0';
+    ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(pin.x,STATUS_H+10);ctx.lineTo(pin.x,pin.y);ctx.stroke();
+    ctx.fillStyle='#ffffff';
+    ctx.beginPath();ctx.arc(pin.x,pin.y,4,0,Math.PI*2);ctx.fill();
+  }
+  if(droppingPin){
+    ctx.strokeStyle='rgba(255,255,255,0.7)';
+    ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(droppingPin.x,STATUS_H+10);ctx.lineTo(droppingPin.x,droppingPin.y);ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.9)';
+    ctx.beginPath();ctx.arc(droppingPin.x,droppingPin.y,4,0,Math.PI*2);ctx.fill();
+  }
+  for(const b of bubbles){
+    const lvl=b.lvl;
+    const dangerZone = b.y>goy-60;
+    ctx.save();
+    ctx.globalAlpha=b.alpha;
+    if(b.scale!==1) ctx.translate(b.x,b.y),ctx.scale(b.scale,b.scale),ctx.translate(-b.x,-b.y);
+    const grd=ctx.createRadialGradient(b.x-b.r*0.3,b.y-b.r*0.3,b.r*0.1,b.x,b.y,b.r);
+    let col=LEVELS[lvl].color;
+    if(dangerZone){
+      const pulse=0.5+0.5*Math.sin(Date.now()*0.01);
+      ctx.shadowBlur=20;ctx.shadowColor='#ff0000';
+      col=`hsl(${0+pulse*30},100%,60%)`;
+    }
+    grd.addColorStop(0,'#ffffff');
+    grd.addColorStop(0.3,col);
+    grd.addColorStop(1,col);
+    ctx.fillStyle=grd;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();
+    if(b.flash>0){ctx.fillStyle=`rgba(255,255,255,${b.flash})`;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill();}
+    ctx.restore();
+  }
+  for(const p of particles){
+    ctx.globalAlpha=p.life;
+    ctx.fillStyle=p.color;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  for(const t of floatingTexts){
+    ctx.globalAlpha=t.life;
+    ctx.fillStyle=t.color;
+    ctx.font='bold 18px sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText(t.text,t.x,t.y);
+  }
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#ffffff';
+  ctx.font='bold 20px sans-serif';
+  ctx.textAlign='left';
+  ctx.fillText(score.toLocaleString(),12,32);
+  if(chainCount>1){
+    ctx.fillStyle='#ffdd00';
+    ctx.font='bold 14px sans-serif';
+    ctx.fillText('x'+chainCount,W/2-20,32);
+  }
+  ctx.textAlign='right';
+  ctx.fillStyle='#aaaaaa';
+  ctx.font='14px sans-serif';
+  ctx.fillText('BEST: '+(isFinite(bestScore)?bestScore.toLocaleString():'0'),W-12,32);
+  if(state==='gameover'){
+    ctx.fillStyle='rgba(0,0,0,0.7)';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#ffffff';
+    ctx.font='bold 36px sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText('GAME OVER',W/2,H/2-60);
+    ctx.font='bold 28px sans-serif';
+    ctx.fillText('SCORE: '+score.toLocaleString(),W/2,H/2);
+    ctx.fillStyle='#ffdd00';
+    ctx.font='22px sans-serif';
+    ctx.fillText('BEST: '+bestScore.toLocaleString(),W/2,H/2+40);
+    ctx.fillStyle='#aaaaaa';
+    ctx.font='16px sans-serif';
+    if(Date.now()-gameOverTimer>1000) ctx.fillText('TAP TO PLAY AGAIN',W/2,H/2+90);
+  } else if(tipTimer>0){
+    ctx.globalAlpha=Math.min(1,tipTimer);
+    ctx.fillStyle='rgba(255,255,255,0.5)';
+    ctx.font='14px sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText('TAP ANYWHERE TO DROP PIN',W/2,H-20);
+  }
+  if(flashAlpha>0){
+    ctx.fillStyle=`rgba(255,255,255,${flashAlpha})`;
+    ctx.fillRect(0,0,W,H);
+  }
+}
+
+function loop(ts){
+  const dt=Math.min((ts-lastTime)/1000,0.05);
+  lastTime=ts;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+resize();
+window.addEventListener('resize',resize);
+initAudio();
+startGame();
+requestAnimationFrame(ts=>{lastTime=ts;requestAnimationFrame(loop);});
+
+})();
+</script>
+</body>
+</html>
