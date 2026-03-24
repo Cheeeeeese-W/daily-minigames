@@ -82,10 +82,12 @@ function resize(){
   DPR = window.devicePixelRatio || 1;
   W = window.innerWidth;
   H = window.innerHeight;
+  if (W === 0 || H === 0) return;
   canvas.width = W * DPR;
   canvas.height = H * DPR;
   canvas.style.width = W + 'px';
   canvas.style.height = H + 'px';
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.scale(DPR, DPR);
 }
 
@@ -470,11 +472,15 @@ function loop(ts){
   requestAnimationFrame(loop);
 }
 
-resize();
-window.addEventListener('resize',resize);
-initAudio();
-startGame();
-requestAnimationFrame(ts=>{lastTime=ts;requestAnimationFrame(loop);});
+function init(){
+  resize();
+  if (W === 0 || H === 0) { requestAnimationFrame(init); return; }
+  window.addEventListener('resize',resize);
+  initAudio();
+  startGame();
+  requestAnimationFrame(ts=>{lastTime=ts;requestAnimationFrame(loop);});
+}
+init();
 
 })();
 </script>
