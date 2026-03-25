@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Farm Ring Toss · 农场套圈乐</title>
+<style>
+:root{
+  --bg:#e8f5e9;--bg2:#c8e6c9;--card:#ffffffee;--card2:#f1f8e9;
+  --accent:#4caf50;--accent2:#81c784;--accent3:#2e7d32;
+  --warm:#ff9800;--warm2:#ffb74d;--danger:#e53935;
+  --text:#1b5e20;--text2:#33691e;--text3:#558b2f;
+  --shadow:0 4px 24px rgba(27,94,32,.13);
+  --shadow2:0 2px 8px rgba(27,94,32,.10);
+  --radius:16px;--radius2:12px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);}
+body{background:linear-gradient(170deg,#e8f5e9 0%,#c8e6c9 40%,#a5d6a7 100%);background-attachment:fixed;}
+
+/* ===== INTRO ===== */
+#screen-intro{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:linear-gradient(170deg,#e8f5e9 0%,#c8e6c9 40%,#a5d6a7 100%);overflow-y:auto;}
+.intro-box{max-width:520px;width:90%;padding:40px 28px 36px;text-align:center;}
+.intro-deco{display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:8px;opacity:0;animation:fadeDown .6s .1s forwards;}
+.intro-deco-line{flex:1;max-width:60px;height:2px;background:linear-gradient(90deg,transparent,var(--accent2));}
+.intro-deco-gem{font-size:22px;animation:pulse 2s infinite;}
+.intro-title{font-size:42px;font-weight:800;color:var(--accent3);letter-spacing:2px;opacity:0;animation:fadeDown .6s .2s forwards;text-shadow:0 2px 12px rgba(46,125,50,.15);}
+.intro-sub{font-size:13px;letter-spacing:6px;text-transform:uppercase;color:var(--text3);margin:6px 0 16px;opacity:0;animation:fadeDown .6s .3s forwards;}
+.intro-tagline{font-size:15px;color:var(--text2);line-height:1.7;margin-bottom:24px;opacity:0;animation:fadeDown .6s .4s forwards;}
+.section-head{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:16px;opacity:0;animation:fadeDown .6s .5s forwards;}
+.section-head-line{flex:1;max-width:50px;height:1px;background:var(--accent2);}
+.section-head-text{font-size:15px;font-weight:700;color:var(--accent3);letter-spacing:3px;}
+.cards-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:28px;opacity:0;animation:fadeUp .6s .6s forwards;}
+.rule-card{background:var(--card);border-radius:var(--radius2);padding:14px 10px;text-align:center;box-shadow:var(--shadow2);border:1px solid #c8e6c966;transition:transform .2s;}
+.rule-card:hover{transform:translateY(-2px);}
+.rule-card .icon{font-size:28px;margin-bottom:6px;}
+.rule-card .rc-title{font-size:13px;font-weight:700;color:var(--accent3);margin-bottom:4px;}
+.rule-card .rc-desc{font-size:11px;color:var(--text3);line-height:1.5;}
+.intro-controls{font-size:12px;color:var(--text3);margin-bottom:20px;opacity:0;animation:fadeUp .6s .7s forwards;}
+.btn-start{display:inline-block;padding:14px 48px;font-size:18px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent3));border:none;border-radius:40px;cursor:pointer;box-shadow:0 4px 20px rgba(76,175,80,.35);transition:all .2s;opacity:0;animation:fadeUp .6s .8s forwards;letter-spacing:2px;}
+.btn-start:hover{transform:translateY(-2px) scale(1.03);box-shadow:0 6px 28px rgba(76,175,80,.45);}
+.btn-start:active{transform:scale(.97);}
+
+/* ===== GAME SCREEN ===== */
+#screen-game{display:none;width:100%;height:100%;position:fixed;inset:0;}
+.game-wrap{display:flex;width:100%;height:100%;gap:0;}
+.game-left{flex:1;display:flex;flex-direction:column;position:relative;min-width:0;align-items:center;background:#7cb342;}
+.game-right{width:210px;flex-shrink:0;padding:8px 8px 8px 0;display:flex;flex-direction:column;}
+
+/* HUD */
+.hud{display:flex;gap:0;padding:0;background:var(--card);border-bottom:1px solid #c8e6c966;width:100%;align-items:stretch;}
+.hud-item{flex:1;text-align:center;padding:6px 4px;}
+.hud-label{font-size:10px;color:var(--text3);letter-spacing:1px;}
+.hud-val{font-size:20px;font-weight:800;color:var(--accent3);}
+.hud-item+.hud-item{border-left:1px solid #e0e0e0;}
+/* Game control buttons in HUD */
+.hud-buttons{display:flex;align-items:center;gap:4px;padding:4px 8px;border-left:1px solid #e0e0e0;flex-shrink:0;}
+.hud-btn{width:32px;height:32px;border:none;border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .15s;background:#f1f8e9;color:var(--text2);}
+.hud-btn:hover{background:var(--accent2);color:#fff;transform:scale(1.08);}
+.hud-btn:active{transform:scale(.95);}
+.hud-btn.btn-danger:hover{background:var(--danger);color:#fff;}
+
+/* Slots bar */
+.slots-bar{display:flex;gap:4px;padding:6px 10px;background:#f1f8e9dd;border-bottom:1px solid #c8e6c966;justify-content:center;width:100%;}
+.slot{width:42px;height:42px;border-radius:10px;background:var(--card);border:2px dashed #a5d6a7;display:flex;align-items:center;justify-content:center;font-size:26px;transition:all .25s;position:relative;}
+.slot.filled{border:2px solid var(--accent2);background:#e8f5e9;}
+.slot.ring-slot{border:2px solid #e65100;background:#fff3e0;}
+.slot.clearing{animation:slotClear .4s forwards;}
+
+/* Canvas */
+#farm-canvas{display:block;cursor:crosshair;touch-action:none;}
+
+/* Cooldown overlay */
+.cooldown-bar{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;background:rgba(0,0,0,.45);padding:6px 14px;border-radius:20px;pointer-events:none;}
+.cd-ring{width:18px;height:18px;border-radius:50%;border:2.5px solid #ff9800;opacity:.3;transition:opacity .2s,border-color .2s;}
+.cd-ring.ready{opacity:1;border-color:#ffb74d;background:rgba(255,152,0,.2);}
+.cd-label{color:#fff;font-size:11px;font-weight:600;letter-spacing:1px;margin-left:4px;}
+
+/* Wind indicator */
+.wind-indicator{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.4);padding:4px 10px;border-radius:12px;color:#fff;font-size:11px;display:flex;align-items:center;gap:4px;pointer-events:none;}
+.wind-arrow{display:inline-block;transition:transform .5s;}
+
+/* Pause overlay */
+#pause-overlay{position:absolute;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:50;flex-direction:column;gap:16px;}
+#pause-overlay.show{display:flex;}
+.pause-title{color:#fff;font-size:36px;font-weight:800;letter-spacing:4px;text-shadow:0 2px 12px rgba(0,0,0,.3);}
+.pause-buttons{display:flex;gap:12px;}
+.pause-btn{padding:10px 28px;border:none;border-radius:20px;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:1px;}
+.pause-btn-resume{background:linear-gradient(135deg,var(--accent),var(--accent3));color:#fff;box-shadow:0 4px 16px rgba(76,175,80,.3);}
+.pause-btn-resume:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(76,175,80,.4);}
+.pause-btn-restart{background:var(--warm);color:#fff;}
+.pause-btn-restart:hover{transform:translateY(-2px);}
+.pause-btn-quit{background:#e0e0e0;color:var(--text2);}
+.pause-btn-quit:hover{background:#bdbdbd;transform:translateY(-2px);}
+
+/* ===== GAME OVER ===== */
+#screen-gameover{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);backdrop-filter:blur(12px);opacity:0;pointer-events:none;transition:opacity .3s;}
+#screen-gameover.show{opacity:1;pointer-events:auto;}
+.go-card{background:var(--card);border-radius:28px;box-shadow:0 12px 60px rgba(0,0,0,.25);padding:36px 32px;max-width:400px;width:90%;text-align:center;transform:scale(.85);transition:transform .4s cubic-bezier(.34,1.56,.64,1);}
+#screen-gameover.show .go-card{transform:scale(1);}
+.go-tag{display:inline-block;background:var(--danger);color:#fff;font-size:12px;font-weight:700;padding:4px 16px;border-radius:20px;letter-spacing:2px;margin-bottom:10px;}
+.go-score-label{font-size:13px;color:var(--text3);margin-top:6px;}
+.go-score-val{font-size:58px;font-weight:800;color:var(--accent3);line-height:1.1;}
+.go-best{font-size:13px;color:var(--text3);margin:4px 0 14px;}
+.go-actions{margin-top:16px;display:flex;gap:10px;justify-content:center;}
+.go-btn{padding:10px 28px;border:none;border-radius:20px;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;}
+.go-btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent3));color:#fff;box-shadow:0 4px 16px rgba(76,175,80,.3);}
+.go-btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(76,175,80,.4);}
+.go-btn-secondary{background:#e0e0e0;color:var(--text2);}
+.go-btn-secondary:hover{background:#bdbdbd;}
+
+/* Animations */
+@keyframes fadeDown{from{opacity:0;transform:translateY(-18px);}to{opacity:1;transform:none;}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:none;}}
+@keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.15);}}
+@keyframes slotClear{0%{transform:scale(1);opacity:1;}50%{transform:scale(1.3);opacity:.5;}100%{transform:scale(0);opacity:0;}}
+@keyframes catchPop{0%{transform:scale(0);}60%{transform:scale(1.3);}100%{transform:scale(1);}}
+@keyframes scorePop{0%{transform:scale(1);}50%{transform:scale(1.25);color:var(--warm);}100%{transform:scale(1);}}
+.score-pop{animation:scorePop .3s;}
+
+/* Responsive */
+@media(max-width:740px){
+  .game-right{display:none;}
+  .intro-title{font-size:32px;}
+  .slot{width:34px;height:34px;font-size:22px;border-radius:8px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== INTRO ===== -->
+<div id="screen-intro">
+<div class="intro-box">
+  <div class="intro-deco">
+    <div class="intro-deco-line"></div>
+    <div class="intro-deco-gem">🌾</div>
+    <div class="intro-deco-line" style="background:linear-gradient(270deg,transparent,var(--accent2));"></div>
+  </div>
+  <div class="intro-title">农场套圈乐</div>
+  <div class="intro-sub">FARM RING TOSS</div>
+  <div class="intro-tagline">
+    农场里小动物们自由奔跑，站在栅栏前拿起套圈来捕捉它们吧！<br>
+    注意控制力度——太大会飞过头！没套中的圈会占格子哦！
+  </div>
+  <div class="section-head">
+    <div class="section-head-line"></div>
+    <div class="section-head-text">玩法说明</div>
+    <div class="section-head-line"></div>
+  </div>
+  <div class="cards-grid">
+    <div class="rule-card"><div class="icon">🧑‍🌾</div><div class="rc-title">精准投掷</div><div class="rc-desc">从底部农夫处发射套圈，力度过大会飞过动物！</div></div>
+    <div class="rule-card"><div class="icon">⭕</div><div class="rc-title">空圈占位</div><div class="rc-desc">没套中的圈会落入格子且无法消除，浪费格子！</div></div>
+    <div class="rule-card"><div class="icon">🌬️</div><div class="rc-title">风向干扰</div><div class="rc-desc">风会偏移套圈轨迹，注意右上角风向标</div></div>
+    <div class="rule-card"><div class="icon">✨</div><div class="rc-title">三连消除</div><div class="rc-desc">连续3只相同动物消除得分，圈不参与消除</div></div>
+  </div>
+  <div class="intro-controls">
+    鼠标/触屏：按住蓄力 → 拖动瞄准 → 松手发射 | 红色力度条 = 力度过大警告
+  </div>
+  <button class="btn-start" onclick="startGame()">开始游戏</button>
+</div>
+</div>
+
+<!-- ===== GAME ===== -->
+<div id="screen-game">
+<div class="game-wrap">
+  <div class="game-left">
+    <div class="hud">
+      <div class="hud-item"><div class="hud-label">分数</div><div class="hud-val" id="hud-score">0</div></div>
+      <div class="hud-item"><div class="hud-label">等级</div><div class="hud-val" id="hud-level">1</div></div>
+      <div class="hud-item"><div class="hud-label">最高分</div><div class="hud-val" id="hud-best">0</div></div>
+      <div class="hud-item"><div class="hud-label">农场</div><div class="hud-val" id="hud-farm">0/12</div></div>
+      <div class="hud-buttons">
+        <button class="hud-btn" onclick="togglePause()" title="暂停">⏸</button>
+        <button class="hud-btn" onclick="confirmRestart()" title="重开">🔄</button>
+        <button class="hud-btn btn-danger" onclick="confirmEnd()" title="结束">⏹</button>
+      </div>
+    </div>
+    <div class="slots-bar" id="slots-bar"></div>
+    <canvas id="farm-canvas"></canvas>
+    <div class="cooldown-bar" id="cooldown-bar"></div>
+    <div class="wind-indicator" id="wind-indicator">
+      <span class="wind-arrow" id="wind-arrow">→</span>
+      <span id="wind-text">微风</span>
+    </div>
+    <!-- Pause overlay -->
+    <div id="pause-overlay">
+      <div class="pause-title">已暂停</div>
+      <div class="pause-buttons">
+        <button class="pause-btn pause-btn-resume" onclick="togglePause()">继续游戏</button>
+        <button class="pause-btn pause-btn-restart" onclick="pauseRestart()">重新开始</button>
+        <button class="pause-btn pause-btn-quit" onclick="pauseQuit()">返回主页</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ===== GAME OVER ===== -->
+<div id="screen-gameover">
+<div class="go-card">
+  <div class="go-tag">游戏结束</div>
+  <div class="go-score-label">最终得分</div>
+  <div class="go-score-val" id="go-score">0</div>
+  <div class="go-best" id="go-best">最高分: 0</div>
+  <div class="go-actions">
+    <button class="go-btn go-btn-primary" onclick="restartGame()">再来一局 ↺</button>
+    <button class="go-btn go-btn-secondary" onclick="goHome()">返回主页</button>
+  </div>
+</div>
+</div>
+
+<script>
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&gameStarted&&!gameOver){togglePause();e.preventDefault();}
+});
+
+// ===== CONSTANTS =====
+const SLOT_COUNT = 10;
+const MAX_FARM = 12;
+const MAX_RINGS = 5;
+const RING_RECHARGE = 1.8;
+const RING_TYPE = 99; // special slot type for missed rings — cannot be matched
+const ANIMAL_TYPES = [
+  {emoji:'🐔',name:'chicken'},{emoji:'🐷',name:'pig'},{emoji:'🐑',name:'sheep'},
+  {emoji:'🐮',name:'cow'},{emoji:'🐰',name:'rabbit'},{emoji:'🐸',name:'frog'},
+  {emoji:'🦊',name:'fox'},{emoji:'🐱',name:'cat'},{emoji:'🐶',name:'dog'},
+];
+let FX, FY, FW, FH;
+let launchX, launchY;
+
+// ===== STATE =====
+let canvas, ctx, W, H;
+let score=0, level=1, bestScore=0, gameOver=false, gameStarted=false, paused=false;
+let animals=[], rings=[], slots=[], particles=[], floatTexts=[];
+let spawnTimer=0, spawnInterval=2800, elapsedTime=0;
+let pressing=false, pressCurrent=null, chargeStart=0;
+let lastTime=0, availableTypes=3, comboCount=0;
+let ringCount=MAX_RINGS, ringRechargeTimer=0;
+let windX=0, windY=0, windChangeTimer=0;
+let trails=[];
+
+// ===== PAUSE / CONTROLS =====
+function togglePause(){
+  if(gameOver||!gameStarted)return;
+  paused=!paused;
+  const overlay=document.getElementById('pause-overlay');
+  if(paused){overlay.classList.add('show');pressing=false;pressCurrent=null;}
+  else{overlay.classList.remove('show');lastTime=0;}
+}
+function confirmRestart(){
+  if(!gameStarted)return;
+  if(score>0&&!confirm('确定要重新开始吗？当前分数将丢失！'))return;
+  if(paused){paused=false;document.getElementById('pause-overlay').classList.remove('show');}
+  lastTime=0;resetGame();
+}
+function confirmEnd(){
+  if(!gameStarted||gameOver)return;
+  if(!confirm('确定要结束本局游戏吗？'))return;
+  if(paused){paused=false;document.getElementById('pause-overlay').classList.remove('show');}
+  endGame();
+}
+function pauseRestart(){paused=false;document.getElementById('pause-overlay').classList.remove('show');lastTime=0;resetGame();}
+function pauseQuit(){paused=false;document.getElementById('pause-overlay').classList.remove('show');goHome();}
+
+// ===== INIT =====
+function initSlots(){
+  slots=[];const bar=document.getElementById('slots-bar');bar.innerHTML='';
+  for(let i=0;i<SLOT_COUNT;i++){const div=document.createElement('div');div.className='slot';div.id='slot-'+i;bar.appendChild(div);slots.push({type:-1,el:div});}
+}
+function initCooldownUI(){
+  const bar=document.getElementById('cooldown-bar');bar.innerHTML='';
+  for(let i=0;i<MAX_RINGS;i++){const d=document.createElement('div');d.className='cd-ring ready';d.id='cd-'+i;bar.appendChild(d);}
+  const lbl=document.createElement('div');lbl.className='cd-label';lbl.id='cd-label';lbl.textContent='套圈';bar.appendChild(lbl);
+}
+function updateCooldownUI(){
+  for(let i=0;i<MAX_RINGS;i++){const el=document.getElementById('cd-'+i);if(el){if(i<ringCount)el.classList.add('ready');else el.classList.remove('ready');}}
+}
+function calcFarmRect(){
+  FW=Math.min(W*0.55,480);FH=Math.min(H*0.55,380);
+  FX=(W-FW)/2;FY=(H-FH)/2-20;
+  launchX=W/2;launchY=FY+FH+60;
+}
+
+function startGame(){
+  document.getElementById('screen-intro').style.display='none';
+  document.getElementById('screen-game').style.display='block';
+  document.getElementById('screen-gameover').classList.remove('show');
+  canvas=document.getElementById('farm-canvas');ctx=canvas.getContext('2d');
+  resizeCanvas();
+  bestScore=parseInt(localStorage.getItem('farmringtoss-best'))||0;
+  document.getElementById('hud-best').textContent=bestScore;
+  resetGame();requestAnimationFrame(gameLoop);
+}
+function resetGame(){
+  score=0;level=1;gameOver=false;gameStarted=true;paused=false;
+  document.getElementById('pause-overlay').classList.remove('show');
+  animals=[];rings=[];particles=[];trails=[];floatTexts=[];
+  spawnTimer=0;spawnInterval=2800;elapsedTime=0;
+  availableTypes=3;comboCount=0;
+  ringCount=MAX_RINGS;ringRechargeTimer=0;
+  windX=0;windY=0;windChangeTimer=3;
+  pressing=false;pressCurrent=null;
+  initSlots();initCooldownUI();updateHUD();
+  for(let i=0;i<3;i++)spawnAnimal();
+}
+function resizeCanvas(){
+  const container=canvas.parentElement;const rect=container.getBoundingClientRect();
+  const hudH=container.querySelector('.hud').offsetHeight;
+  const slotsH=document.getElementById('slots-bar').offsetHeight;
+  W=canvas.width=rect.width;H=canvas.height=rect.height-hudH-slotsH;
+  canvas.style.width=W+'px';canvas.style.height=H+'px';
+  calcFarmRect();
+}
+window.addEventListener('resize',()=>{if(gameStarted)resizeCanvas();});
+
+// ===== WIND =====
+function updateWind(dt){
+  windChangeTimer-=dt;
+  if(windChangeTimer<=0){
+    windChangeTimer=4+Math.random()*4;
+    const strength=20+level*8+Math.random()*30;
+    const angle=Math.random()*Math.PI*2;
+    windX=Math.cos(angle)*strength;windY=Math.sin(angle)*strength*0.5;
+    const arrow=document.getElementById('wind-arrow');const text=document.getElementById('wind-text');
+    const deg=Math.atan2(windY,windX)*180/Math.PI;
+    arrow.style.transform=`rotate(${deg}deg)`;
+    const s=Math.sqrt(windX*windX+windY*windY);
+    text.textContent=s<25?'微风':s<50?'清风':s<80?'强风':'狂风';
+  }
+}
+
+// ===== ANIMALS =====
+function spawnAnimal(){
+  if(animals.length>=MAX_FARM)return;
+  const typeIdx=Math.floor(Math.random()*Math.min(availableTypes,ANIMAL_TYPES.length));
+  const side=Math.floor(Math.random()*4);let x,y;
+  if(side===0){x=FX-20;y=FY+Math.random()*FH;}
+  else if(side===1){x=FX+FW+20;y=FY+Math.random()*FH;}
+  else if(side===2){x=FX+Math.random()*FW;y=FY-20;}
+  else{x=FX+Math.random()*FW;y=FY+FH+20;}
+  const speed=30+level*8+Math.random()*15;
+  const cx=FX+FW/2,cy=FY+FH/2;
+  const angle=Math.atan2(cy-y+(Math.random()-0.5)*100,cx-x+(Math.random()-0.5)*100);
+  animals.push({x,y,type:typeIdx,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,radius:20,changeTimer:1.5+Math.random()*2,speed,scaredTimer:0,scaredAngle:0});
+}
+function updateAnimals(dt){
+  for(const a of animals){
+    if(a.scaredTimer>0){a.scaredTimer-=dt;a.vx=Math.cos(a.scaredAngle)*a.speed*2.2;a.vy=Math.sin(a.scaredAngle)*a.speed*2.2;}
+    a.x+=a.vx*dt;a.y+=a.vy*dt;a.changeTimer-=dt;
+    if(a.changeTimer<=0&&a.scaredTimer<=0){const angle=Math.random()*Math.PI*2;a.vx=Math.cos(angle)*a.speed;a.vy=Math.sin(angle)*a.speed;a.changeTimer=1.5+Math.random()*2;}
+    const margin=12;
+    if(a.x<FX+margin){a.x=FX+margin;a.vx=Math.abs(a.vx);}
+    if(a.x>FX+FW-margin){a.x=FX+FW-margin;a.vx=-Math.abs(a.vx);}
+    if(a.y<FY+margin){a.y=FY+margin;a.vy=Math.abs(a.vy);}
+    if(a.y>FY+FH-margin){a.y=FY+FH-margin;a.vy=-Math.abs(a.vy);}
+  }
+  if(level>=2){
+    for(const r of rings){for(const a of animals){
+      if(a.scaredTimer>0)continue;
+      const dx=a.x-r.x,dy=a.y-r.y;
+      if(Math.sqrt(dx*dx+dy*dy)<80+level*5){a.scaredTimer=0.5+Math.random()*0.3;a.scaredAngle=Math.atan2(dy,dx);}
+    }}
+  }
+}
+function drawAnimals(){
+  ctx.font='32px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const a of animals){ctx.globalAlpha=0.15;ctx.fillText(ANIMAL_TYPES[a.type].emoji,a.x+2,a.y+3);ctx.globalAlpha=1;ctx.fillText(ANIMAL_TYPES[a.type].emoji,a.x,a.y);}
+}
+
+// ===== RINGS =====
+function throwRing(tx,ty,power){
+  if(ringCount<=0)return;
+  ringCount--;updateCooldownUI();
+  const angle=Math.atan2(ty-launchY,tx-launchX);
+  // Higher power = much faster speed — easy to overshoot!
+  const speed=180+power*320;
+  rings.push({x:launchX,y:launchY,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,radius:20,life:2.0,maxLife:2.0,caught:false,landed:false,trail:[]});
+}
+
+function updateRings(dt){
+  for(let i=rings.length-1;i>=0;i--){
+    const r=rings[i];
+    if(r.caught||r.landed){
+      if(r.trail.length>0)trails.push({points:[...r.trail],alpha:1});
+      rings.splice(i,1);continue;
+    }
+    r.trail.push({x:r.x,y:r.y});
+    if(r.trail.length>30)r.trail.shift();
+    r.vx+=windX*dt;r.vy+=windY*dt;
+    r.x+=r.vx*dt;r.y+=r.vy*dt;
+    r.life-=dt;
+    r.vx*=0.982;r.vy*=0.982;
+    // Ring expired or out of bounds — missed! Goes to slot.
+    if(r.life<=0||r.x<-50||r.x>W+50||r.y<-50||r.y>H+50){
+      if(r.trail.length>0)trails.push({points:[...r.trail],alpha:0.7});
+      addMissedRingToSlot(r);
+      rings.splice(i,1);continue;
+    }
+    // Check collision with animals
+    for(let j=animals.length-1;j>=0;j--){
+      const a=animals[j];const dx=r.x-a.x,dy=r.y-a.y;
+      if(Math.sqrt(dx*dx+dy*dy)<r.radius+a.radius){
+        // Check if ring speed is too high — it flies over!
+        const spd=Math.sqrt(r.vx*r.vx+r.vy*r.vy);
+        if(spd>300){
+          // Too fast — ring flies past, animal just gets scared
+          a.scaredTimer=0.6;a.scaredAngle=Math.atan2(a.y-r.y,a.x-r.x);
+          addFloatText(a.x,a.y-20,'飞过了!','#e53935');
+          continue; // don't catch
+        }
+        r.caught=true;
+        catchAnimal(j,r);
+        break;
+      }
+    }
+  }
+}
+
+function addMissedRingToSlot(r){
+  // Find first empty slot
+  let slotIdx=-1;
+  for(let i=0;i<SLOT_COUNT;i++){if(slots[i].type===-1){slotIdx=i;break;}}
+  if(slotIdx===-1){endGame();return;}
+  slots[slotIdx].type=RING_TYPE;
+  slots[slotIdx].el.textContent='⭕';
+  slots[slotIdx].el.classList.add('filled','ring-slot');
+  slots[slotIdx].el.style.animation='catchPop .3s';
+  setTimeout(()=>{if(slots[slotIdx])slots[slotIdx].el.style.animation='';},300);
+  addFloatText(r.x||W/2,r.y||FY,'空圈!','#e65100');
+  // Check if slots full after adding ring
+  let slotsFull=true;
+  for(let i=0;i<SLOT_COUNT;i++){if(slots[i].type===-1){slotsFull=false;break;}}
+  if(slotsFull)endGame();
+}
+
+function updateTrails(dt){for(let i=trails.length-1;i>=0;i--){trails[i].alpha-=dt*1.5;if(trails[i].alpha<=0)trails.splice(i,1);}}
+
+function drawRings(){
+  // Active ring trails
+  for(const r of rings){
+    if(r.trail.length>2){
+      for(let i=1;i<r.trail.length;i++){
+        const t=i/r.trail.length;
+        ctx.globalAlpha=t*0.5*(r.life/r.maxLife);
+        ctx.beginPath();ctx.arc(r.trail[i].x,r.trail[i].y,3+t*4,0,Math.PI*2);
+        ctx.fillStyle='#ffb74d';ctx.fill();
+      }
+    }
+    const alpha=Math.max(0.4,r.life/r.maxLife);
+    ctx.save();ctx.translate(r.x,r.y);ctx.globalAlpha=alpha;
+    ctx.beginPath();ctx.arc(0,0,r.radius,0,Math.PI*2);ctx.strokeStyle='#bf360c';ctx.lineWidth=4;ctx.stroke();
+    ctx.beginPath();ctx.arc(0,0,r.radius-2,0,Math.PI*2);ctx.strokeStyle='#ff9800';ctx.lineWidth=2.5;ctx.stroke();
+    ctx.beginPath();ctx.arc(-4,-4,4,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,0.4)';ctx.fill();
+    ctx.globalAlpha=1;ctx.restore();
+  }
+  // Fading trails
+  for(const t of trails){
+    if(t.points.length<2)continue;
+    for(let i=1;i<t.points.length;i++){
+      const frac=i/t.points.length;
+      ctx.globalAlpha=frac*t.alpha*0.4;
+      ctx.beginPath();ctx.arc(t.points[i].x,t.points[i].y,2+frac*3,0,Math.PI*2);
+      ctx.fillStyle='#ff9800';ctx.fill();
+    }
+  }
+  ctx.globalAlpha=1;
+}
+
+// ===== CATCHING & SLOTS =====
+function catchAnimal(idx,ring){
+  const a=animals[idx];const typeIdx=a.type;
+  for(let i=0;i<12;i++){const angle=Math.random()*Math.PI*2;const spd=60+Math.random()*80;particles.push({x:a.x,y:a.y,vx:Math.cos(angle)*spd,vy:Math.sin(angle)*spd,life:0.7,color:i%2?'#ffb74d':'#66bb6a',size:3+Math.random()*3});}
+  animals.splice(idx,1);
+  let slotIdx=-1;
+  for(let i=0;i<SLOT_COUNT;i++){if(slots[i].type===-1){slotIdx=i;break;}}
+  if(slotIdx===-1){endGame();return;}
+  slots[slotIdx].type=typeIdx;
+  slots[slotIdx].el.textContent=ANIMAL_TYPES[typeIdx].emoji;
+  slots[slotIdx].el.classList.add('filled');
+  slots[slotIdx].el.classList.remove('ring-slot');
+  slots[slotIdx].el.style.animation='catchPop .3s';
+  setTimeout(()=>{if(slots[slotIdx])slots[slotIdx].el.style.animation='';},300);
+  score+=10;
+  addFloatText(a.x,a.y,'+10','#fff');
+  checkMatch();updateHUD();
+}
+
+function checkMatch(){
+  let i=0;
+  while(i<SLOT_COUNT){
+    // Skip empty slots and RING_TYPE slots (rings cannot be matched)
+    if(slots[i].type===-1||slots[i].type===RING_TYPE){i++;continue;}
+    let j=i+1;
+    while(j<SLOT_COUNT&&slots[j].type===slots[i].type)j++;
+    const count=j-i;
+    if(count>=3){
+      const bonus=count*50+(count>3?(count-3)*30:0);
+      comboCount++;
+      const comboBonus=comboCount>1?comboCount*20:0;
+      score+=bonus+comboBonus;
+      if(comboCount>1)addFloatText(W/2,FY-10,`连击x${comboCount}! +${comboBonus}`,'#ff9800');
+      for(let k=i;k<j;k++)slots[k].el.classList.add('clearing');
+      setTimeout(()=>{
+        for(let k=i;k<j;k++){slots[k].type=-1;slots[k].el.textContent='';slots[k].el.classList.remove('filled','clearing','ring-slot');}
+        compactSlots();checkMatch();updateHUD();
+      },400);
+      const scoreEl=document.getElementById('hud-score');
+      scoreEl.classList.remove('score-pop');void scoreEl.offsetWidth;scoreEl.classList.add('score-pop');
+      return;
+    }
+    i=j;
+  }
+  comboCount=0;
+}
+
+function compactSlots(){
+  const filled=[];
+  for(let i=0;i<SLOT_COUNT;i++){if(slots[i].type!==-1)filled.push(slots[i].type);}
+  for(let i=0;i<SLOT_COUNT;i++){
+    if(i<filled.length){
+      slots[i].type=filled[i];
+      if(filled[i]===RING_TYPE){
+        slots[i].el.textContent='⭕';
+        slots[i].el.classList.add('filled','ring-slot');
+      }else{
+        slots[i].el.textContent=ANIMAL_TYPES[filled[i]].emoji;
+        slots[i].el.classList.add('filled');
+        slots[i].el.classList.remove('ring-slot');
+      }
+    }else{
+      slots[i].type=-1;slots[i].el.textContent='';slots[i].el.classList.remove('filled','ring-slot');
+    }
+  }
+}
+
+// ===== FLOATING TEXT =====
+function addFloatText(x,y,text,color){floatTexts.push({x,y,text,color,life:1.2,vy:-40});}
+function updateFloatTexts(dt){for(let i=floatTexts.length-1;i>=0;i--){const f=floatTexts[i];f.y+=f.vy*dt;f.life-=dt;if(f.life<=0)floatTexts.splice(i,1);}}
+function drawFloatTexts(){
+  for(const f of floatTexts){
+    ctx.globalAlpha=Math.max(0,f.life/1.2);
+    ctx.font='bold 16px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle='#000';ctx.fillText(f.text,f.x+1,f.y+1);
+    ctx.fillStyle=f.color;ctx.fillText(f.text,f.x,f.y);
+  }
+  ctx.globalAlpha=1;
+}
+
+// ===== PARTICLES =====
+function updateParticles(dt){for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;if(p.life<=0)particles.splice(i,1);}}
+function drawParticles(){
+  for(const p of particles){ctx.globalAlpha=Math.max(0,p.life/0.7);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size||4,0,Math.PI*2);ctx.fill();}
+  ctx.globalAlpha=1;
+}
+
+// ===== DRAW =====
+function drawBackground(){
+  ctx.fillStyle='#7cb342';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#689f38';
+  for(let i=0;i<W;i+=40){for(let j=0;j<H;j+=40){if((i+j)%80===0){ctx.beginPath();ctx.arc(i+20,j+20,12,0,Math.PI*2);ctx.fill();}}}
+  ctx.save();ctx.fillStyle='#8bc34a';ctx.strokeStyle='#5d4037';ctx.lineWidth=4;
+  roundRect(ctx,FX,FY,FW,FH,12);ctx.fill();ctx.stroke();
+  ctx.fillStyle='#9ccc65';
+  for(let i=FX+20;i<FX+FW;i+=35){for(let j=FY+20;j<FY+FH;j+=35){if((i+j)%70===0){ctx.beginPath();ctx.arc(i,j,8,0,Math.PI*2);ctx.fill();}}}
+  ctx.fillStyle='#5d4037';ctx.strokeStyle='#4e342e';ctx.lineWidth=1;
+  const ps=40;
+  for(let x=FX;x<=FX+FW;x+=ps){ctx.fillRect(x-3,FY-10,6,14);ctx.fillRect(x-3,FY+FH-4,6,14);}
+  for(let y=FY;y<=FY+FH;y+=ps){ctx.fillRect(FX-10,y-3,14,6);ctx.fillRect(FX+FW-4,y-3,14,6);}
+  ctx.strokeStyle='#795548';ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.moveTo(FX,FY-4);ctx.lineTo(FX+FW,FY-4);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(FX,FY+FH+4);ctx.lineTo(FX+FW,FY+FH+4);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(FX-4,FY);ctx.lineTo(FX-4,FY+FH);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(FX+FW+4,FY);ctx.lineTo(FX+FW+4,FY+FH);ctx.stroke();
+  ctx.font='16px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('🌻',FX-14,FY-14);ctx.fillText('🌸',FX+FW+14,FY-14);
+  ctx.fillText('🌼',FX-14,FY+FH+14);ctx.fillText('🌺',FX+FW+14,FY+FH+14);
+  ctx.font='14px serif';
+  for(let x=30;x<W;x+=70){if(x>FX-20&&x<FX+FW+20)continue;ctx.fillText(['🌿','🌱','☘️','🍀'][Math.floor(x/70)%4],x,H-14);}
+  ctx.restore();
+}
+
+function drawLauncher(){
+  const lx=launchX,ly=launchY;
+  ctx.save();
+  ctx.beginPath();ctx.arc(lx,ly,22,0,Math.PI*2);ctx.fillStyle='#5d4037';ctx.fill();
+  ctx.beginPath();ctx.arc(lx,ly,19,0,Math.PI*2);ctx.fillStyle='#795548';ctx.fill();
+  ctx.font='28px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('🧑‍🌾',lx,ly-2);
+  if(ringCount>0){ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.fillStyle='#fff';ctx.fillText(`⭕×${ringCount}`,lx,ly-28);}
+  if(ringCount>0&&!pressing){const t=Date.now()/800;ctx.globalAlpha=0.15+Math.sin(t)*0.1;ctx.beginPath();ctx.arc(lx,ly,30,0,Math.PI*2);ctx.fillStyle='#ffb74d';ctx.fill();}
+  ctx.globalAlpha=1;ctx.restore();
+}
+
+function drawAimLine(){
+  if(!pressing||!pressCurrent||paused)return;
+  if(ringCount<=0)return;
+  const power=Math.min(1,(Date.now()-chargeStart)/1200);
+  const dx=pressCurrent.x-launchX,dy=pressCurrent.y-launchY;
+  const dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist<10)return;
+  const angle=Math.atan2(dy,dx);
+  const speed=180+power*320;
+  let sx=launchX,sy=launchY;
+  let svx=Math.cos(angle)*speed,svy=Math.sin(angle)*speed;
+  ctx.save();
+  const steps=25,stepDt=0.04;
+  for(let i=0;i<steps;i++){
+    svx+=windX*stepDt;svy+=windY*stepDt;
+    sx+=svx*stepDt;sy+=svy*stepDt;
+    svx*=0.982;svy*=0.982;
+    const alpha=1-(i/steps);
+    ctx.globalAlpha=alpha*0.6;
+    ctx.beginPath();ctx.arc(sx,sy,3-i*0.08,0,Math.PI*2);
+    ctx.fillStyle='#ff9800';ctx.fill();
+  }
+  // Speed preview at end of trajectory — warn if too fast
+  const endSpd=Math.sqrt(svx*svx+svy*svy);
+  // Power arc around launcher
+  ctx.globalAlpha=0.7;
+  ctx.beginPath();ctx.arc(launchX,launchY,30,-Math.PI/2,-Math.PI/2+power*Math.PI*2);
+  ctx.strokeStyle=power>0.75?'#e53935':power>0.45?'#ff9800':'#4caf50';
+  ctx.lineWidth=4;ctx.stroke();
+  // Warning text if power too high
+  if(power>0.75){
+    ctx.globalAlpha=0.5+Math.sin(Date.now()/200)*0.3;
+    ctx.font='bold 13px sans-serif';ctx.textAlign='center';ctx.fillStyle='#e53935';
+    ctx.fillText('力度过大!',launchX,launchY+38);
+  }
+  // Direction arrow
+  ctx.globalAlpha=0.8;
+  ctx.beginPath();ctx.moveTo(launchX,launchY);ctx.lineTo(launchX+Math.cos(angle)*45,launchY+Math.sin(angle)*45);
+  ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+  const ax=launchX+Math.cos(angle)*45,ay=launchY+Math.sin(angle)*45;
+  ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(ax-Math.cos(angle-0.4)*12,ay-Math.sin(angle-0.4)*12);ctx.lineTo(ax-Math.cos(angle+0.4)*12,ay-Math.sin(angle+0.4)*12);ctx.closePath();ctx.fillStyle='#fff';ctx.fill();
+  ctx.globalAlpha=1;ctx.restore();
+}
+
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();
+}
+
+// ===== INPUT =====
+function getPos(e){
+  const rect=canvas.getBoundingClientRect();
+  if(e.touches)return{x:e.touches[0].clientX-rect.left,y:e.touches[0].clientY-rect.top};
+  return{x:e.clientX-rect.left,y:e.clientY-rect.top};
+}
+function onDown(e){if(gameOver||paused)return;e.preventDefault();pressing=true;pressCurrent=getPos(e);chargeStart=Date.now();}
+function onMove(e){if(!pressing)return;e.preventDefault();pressCurrent=getPos(e);}
+function onUp(e){
+  if(!pressing)return;e.preventDefault();pressing=false;
+  if(ringCount<=0||paused){pressCurrent=null;return;}
+  const power=Math.min(1,(Date.now()-chargeStart)/1200);
+  if(power<0.05||!pressCurrent){pressCurrent=null;return;}
+  throwRing(pressCurrent.x,pressCurrent.y,power);
+  pressCurrent=null;
+}
+
+// ===== GAME LOOP =====
+function gameLoop(ts){
+  if(!gameStarted)return;
+  if(paused){lastTime=0;requestAnimationFrame(gameLoop);
+    // Still draw so canvas isn't blank
+    drawBackground();drawAnimals();drawRings();drawLauncher();drawParticles();drawFloatTexts();
+    return;
+  }
+  if(!lastTime)lastTime=ts;
+  const dt=Math.min((ts-lastTime)/1000,0.05);
+  lastTime=ts;
+  if(!gameOver){
+    elapsedTime+=dt;
+    const newLevel=1+Math.floor(elapsedTime/25);
+    if(newLevel!==level){
+      level=newLevel;availableTypes=Math.min(3+Math.floor(level/2),ANIMAL_TYPES.length);
+      for(const a of animals)a.speed=30+level*10+Math.random()*15;
+      addFloatText(W/2,H/2,`等级 ${level}!`,'#ffeb3b');updateHUD();
+    }
+    spawnInterval=Math.max(1200,2800-level*180);
+    spawnTimer+=dt*1000;
+    if(spawnTimer>=spawnInterval){spawnTimer=0;spawnAnimal();if(animals.length>=MAX_FARM)endGame();}
+    if(ringCount<MAX_RINGS){
+      ringRechargeTimer+=dt;
+      const rechargeTime=RING_RECHARGE+level*0.1;
+      if(ringRechargeTimer>=rechargeTime){ringRechargeTimer=0;ringCount++;updateCooldownUI();}
+    }else{ringRechargeTimer=0;}
+    updateWind(dt);updateAnimals(dt);updateRings(dt);updateTrails(dt);updateParticles(dt);updateFloatTexts(dt);
+    let slotsFull=true;
+    for(let i=0;i<SLOT_COUNT;i++){if(slots[i].type===-1){slotsFull=false;break;}}
+    if(slotsFull)endGame();
+  }
+  drawBackground();drawAnimals();drawRings();drawLauncher();drawAimLine();drawParticles();drawFloatTexts();
+  document.getElementById('hud-farm').textContent=animals.length+'/'+MAX_FARM;
+  requestAnimationFrame(gameLoop);
+}
+
+function updateHUD(){
+  document.getElementById('hud-score').textContent=score;
+  document.getElementById('hud-level').textContent=level;
+  if(score>bestScore){bestScore=score;localStorage.setItem('farmringtoss-best',bestScore);}
+  document.getElementById('hud-best').textContent=bestScore;
+}
+function endGame(){
+  if(gameOver)return;gameOver=true;
+  setTimeout(()=>showGameOver(),600);
+}
+function showGameOver(){
+  document.getElementById('go-score').textContent=score;
+  document.getElementById('go-best').textContent='最高分: '+bestScore;
+  document.getElementById('screen-gameover').classList.add('show');
+}
+function restartGame(){document.getElementById('screen-gameover').classList.remove('show');lastTime=0;resetGame();}
+function goHome(){document.getElementById('screen-gameover').classList.remove('show');document.getElementById('screen-game').style.display='none';document.getElementById('screen-intro').style.display='flex';gameStarted=false;paused=false;}
+
+// ===== CANVAS EVENTS =====
+document.addEventListener('DOMContentLoaded',()=>{
+  const c=document.getElementById('farm-canvas');
+  c.addEventListener('mousedown',onDown);c.addEventListener('mousemove',onMove);
+  c.addEventListener('mouseup',onUp);c.addEventListener('mouseleave',onUp);
+  c.addEventListener('touchstart',onDown,{passive:false});c.addEventListener('touchmove',onMove,{passive:false});
+  c.addEventListener('touchend',onUp,{passive:false});c.addEventListener('touchcancel',onUp,{passive:false});
+});
+</script>
+</body>
+</html>

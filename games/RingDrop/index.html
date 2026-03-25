@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ring Drop · 环落</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#EDE8DF;
+  --surface:#FDFCF9;
+  --surface2:#F4F0E8;
+  --board:#F0EBE1;
+  --border:#DDD5C4;
+  --border2:#C8BCA8;
+  --text:#1A1612;
+  --text2:#8A7F70;
+  --gold:#A8823A;
+  --gold2:#C8A458;
+  --gold-light:#F2E8D0;
+  --gold-glow:rgba(168,130,58,0.22);
+  --shadow:rgba(26,22,18,0.09);
+  --shadow2:rgba(26,22,18,0.18);
+  --shadow3:rgba(26,22,18,0.04);
+}
+
+html,body{
+  width:100%;min-height:100vh;
+  background:var(--bg);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  color:var(--text);
+  user-select:none;
+  -webkit-user-select:none;
+  overflow-x:hidden;
+}
+
+body{
+  display:flex;flex-direction:row;justify-content:center;align-items:flex-start;
+  gap:20px;
+  padding:20px 16px 36px;
+  background-image:
+    radial-gradient(ellipse 90% 50% at 50% -5%,  rgba(168,130,58,.12) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 10% 85%,  rgba(217,79,61,.05)  0%, transparent 50%),
+    radial-gradient(ellipse 50% 50% at 92% 15%,  rgba(46,125,209,.05) 0%, transparent 50%),
+    repeating-linear-gradient(0deg,  transparent, transparent 44px, rgba(168,130,58,.018) 44px, rgba(168,130,58,.018) 45px),
+    repeating-linear-gradient(90deg, transparent, transparent 44px, rgba(168,130,58,.018) 44px, rgba(168,130,58,.018) 45px);
+}
+
+/* ── HEADER ── */
+.hd{text-align:center;margin-bottom:24px;animation:fadeDown .6s ease both}
+.hd-deco{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  margin-bottom:6px
+}
+.hd-deco-line{
+  width:28px;height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold2));
+}
+.hd-deco-line.r{background:linear-gradient(90deg,var(--gold2),transparent);}
+.hd-deco-gem{
+  width:6px;height:6px;border-radius:1px;
+  background:var(--gold2);transform:rotate(45deg);
+}
+.hd-title{
+  font-family:Georgia,'Times New Roman',serif;
+  font-size:clamp(30px,6vw,44px);
+  font-weight:600;letter-spacing:-0.5px;
+  line-height:1;color:var(--text)
+}
+.hd-title em{font-style:italic;color:var(--gold)}
+.hd-sub{
+  font-size:10px;font-weight:500;letter-spacing:3.5px;
+  text-transform:uppercase;color:var(--text2);margin-top:5px
+}
+
+/* ── STATS ── */
+.stats{
+  display:flex;align-items:stretch;gap:0;
+  background:linear-gradient(160deg,#FDFAF5,#F5F0E6);
+  border:1px solid var(--border);
+  border-radius:16px;
+  box-shadow:0 4px 20px var(--shadow),inset 0 1px 0 rgba(255,255,255,.8);
+  margin-bottom:16px;
+  overflow:hidden;
+  animation:fadeDown .6s .1s ease both;
+}
+.stat{
+  padding:10px 20px;text-align:center;min-width:76px;
+  border-right:1px solid var(--border);
+}
+.stat:last-child{border-right:none}
+.stat-label{
+  font-size:9px;font-weight:600;letter-spacing:2px;
+  text-transform:uppercase;color:var(--text2);margin-bottom:2px
+}
+.stat-val{
+  font-family:Georgia,'Times New Roman',serif;
+  font-size:26px;font-weight:600;line-height:1;color:var(--text);
+  transition:color .3s
+}
+.stat-val.flash{animation:statFlash .4s ease}
+
+/* ── LEVEL PROGRESS ── */
+.progress-wrap{
+  width:100%;max-width:340px;margin-bottom:18px;
+  animation:fadeDown .6s .15s ease both
+}
+.progress-labels{
+  display:flex;justify-content:space-between;
+  font-size:10px;color:var(--text2);font-weight:500;
+  letter-spacing:.5px;margin-bottom:5px
+}
+.progress-track{
+  height:5px;background:var(--border);border-radius:3px;overflow:hidden
+}
+.progress-fill{
+  height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2),#D4A94A);
+  border-radius:3px;transition:width .6s cubic-bezier(.34,1.56,.64,1);width:0%;
+  box-shadow:0 0 6px rgba(184,146,58,.4);
+}
+
+/* ── GRID ── */
+.grid-wrap{
+  animation:fadeDown .6s .2s ease both;margin-bottom:20px
+}
+.grid-card{
+  background:linear-gradient(150deg,#FDFAF5,#F5F0E6);
+  border:1px solid var(--border);
+  border-radius:26px;
+  padding:16px;
+  box-shadow:
+    0 12px 48px var(--shadow2),
+    0 3px 10px var(--shadow),
+    inset 0 1px 0 rgba(255,255,255,.9),
+    inset 0 -1px 0 rgba(0,0,0,.04);
+}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(3,96px);
+  grid-template-rows:repeat(3,96px);
+  gap:9px;
+}
+
+.cell{
+  width:96px;height:96px;
+  background:
+    radial-gradient(circle, rgba(210,195,168,.18) 1px, transparent 1px),
+    linear-gradient(145deg,#FAF7F1,#F0EBE0);
+  background-size: 9px 9px, 100% 100%;
+  border:1.5px solid rgba(200,185,155,.5);
+  border-radius:16px;
+  position:relative;
+  transition:all .16s ease;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.04),inset 0 -1px 2px rgba(255,255,255,.7);
+}
+.cell::after{content:none}
+.cell.over-valid{
+  /* border-color and background tinted to ring color via JS */
+  box-shadow:0 0 0 3px var(--hover-glow,var(--gold-glow)),inset 0 1px 3px rgba(0,0,0,.04);
+  transform:scale(1.05)
+}
+.cell.over-invalid{
+  border-color:rgba(217,79,61,.5)!important;
+  background-color:rgba(217,79,61,.07)!important;
+  box-shadow:0 0 0 2px rgba(217,79,61,.2);
+}
+.cell.clearing{animation:cellClear .5s ease both}
+
+/* circle placement zones — concentric, centered, dramatically different sizes */
+/* Large 70px (border 13px→inner 44px) = Medium 44px (border 9px→inner 26px) > Small 22px */
+.cz{
+  position:absolute;border-radius:50%;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+}
+.cz-large { width:72px;height:72px; }
+.cz-medium{ width:44px;height:44px; }
+.cz-small { width:22px;height:22px; }
+.cz.placed{animation:ringDropC .4s cubic-bezier(.34,1.56,.64,1) both}
+
+/* Ring styling — donut shape, border set inline per color */
+.ring{
+  width:100%;height:100%;border-radius:50%;
+  position:relative;
+  background:transparent;
+  /* border-width, border-color, box-shadow set inline */
+}
+
+/* ── TRAY ── */
+.tray-section{animation:fadeUp .6s .3s ease both}
+.tray-label{
+  text-align:center;font-size:10px;font-weight:600;
+  letter-spacing:2.5px;text-transform:uppercase;
+  color:var(--text2);margin-bottom:12px
+}
+.tray{
+  display:flex;gap:14px;align-items:flex-end;justify-content:center;
+  background:linear-gradient(160deg,#FDFAF5,#F5F0E6);
+  border:1px solid var(--border);
+  border-radius:22px;
+  padding:18px 24px 14px;
+  box-shadow:
+    0 4px 24px var(--shadow),
+    inset 0 1px 0 rgba(255,255,255,.9),
+    inset 0 -1px 0 rgba(0,0,0,.03);
+}
+.tslot{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  cursor:grab;
+  transition:transform .15s ease,opacity .3s
+}
+.tslot:active{cursor:grabbing}
+.tslot-ring-area{
+  display:flex;align-items:center;justify-content:center;
+  position:relative;
+}
+.tslot .ring{transition:transform .2s cubic-bezier(.34,1.56,.64,1)}
+.tslot:hover .ring{transform:translateY(-6px) scale(1.08)}
+.tslot.dragging{opacity:.35;pointer-events:none}
+/* Ring area sizes (heights) ensure vertical alignment at baseline */
+.tslot-sz-large  .tslot-ring-area{width:74px;height:74px}
+.tslot-sz-medium .tslot-ring-area{width:74px;height:74px}
+.tslot-sz-small  .tslot-ring-area{width:74px;height:74px}
+/* Ring visual sizes in tray — much more distinct */
+.tslot-sz-large  .ring{width:70px;height:70px}
+.tslot-sz-medium .ring{width:46px;height:46px}
+.tslot-sz-small  .ring{width:24px;height:24px}
+.tslot-label{
+  font-size:11px;font-weight:600;letter-spacing:1px;
+  color:var(--text2);
+}
+
+/* New item pop-in animation */
+@keyframes tslotAppear{
+  0%  {opacity:0;transform:scale(0) rotate(-150deg)}
+  65% {transform:scale(1.18) rotate(8deg);opacity:1}
+  100%{transform:scale(1) rotate(0);opacity:1}
+}
+.tslot.new-item .tslot-ring-area .ring{animation:tslotAppear .4s cubic-bezier(.34,1.56,.64,1) both}
+
+/* ── COLORS AVAILABLE ── */
+.colors-row{
+  display:flex;gap:7px;justify-content:center;margin-top:11px;flex-wrap:wrap
+}
+.cdot{
+  width:9px;height:9px;border-radius:50%;
+  box-shadow:0 1px 4px rgba(0,0,0,.15)
+}
+
+/* ── DRAG GHOST ── */
+#ghost{
+  position:fixed;border-radius:50%;pointer-events:none;
+  z-index:9999;display:none;
+  background:transparent;
+  transform:translate(-50%,-50%) scale(1.18);
+  /* border & box-shadow set inline */
+}
+
+/* ── SHARDS — arc fragments that fly to score ── */
+/* shape & position set inline; animation via Web Animations API */
+.shard{
+  position:fixed;pointer-events:none;z-index:9990;
+  border-radius:50%;background:transparent;
+}
+
+/* ── CZ dissolve when eliminated ── */
+@keyframes czDissolve{
+  0%  {opacity:1;transform:translate(-50%,-50%) scale(1)}
+  60% {opacity:.6;transform:translate(-50%,-50%) scale(.55) rotate(30deg)}
+  100%{opacity:0;transform:translate(-50%,-50%) scale(.2) rotate(60deg)}
+}
+.cz.dissolving{
+  animation:czDissolve .32s cubic-bezier(.4,0,1,1) forwards;
+  pointer-events:none;
+}
+
+/* ── Score counter pulse on each shard arrival ── */
+@keyframes scoreTick{
+  0%  {color:var(--text)}
+  40% {color:var(--gold2);transform:scale(1.1)}
+  100%{color:var(--text);transform:scale(1)}
+}
+.score-tick{animation:scoreTick .22s ease}
+
+/* ── Combo badge — near score ── */
+.combo-badge{
+  position:fixed;pointer-events:none;z-index:9993;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:11px;font-weight:700;
+  letter-spacing:1.5px;text-transform:uppercase;
+  color:#fff;
+  background:linear-gradient(135deg,#7C3AED,#DB2777);
+  padding:3px 10px;border-radius:20px;
+  box-shadow:0 3px 12px rgba(124,58,237,.4);
+  animation:badgeFade .9s ease forwards;
+  white-space:nowrap;
+}
+@keyframes badgeFade{
+  0%  {opacity:0;transform:translateY(4px) scale(.85)}
+  20% {opacity:1;transform:translateY(0) scale(1)}
+  75% {opacity:1}
+  100%{opacity:0;transform:translateY(-12px) scale(.9)}
+}
+
+/* ── LEVEL UP ── */
+.lvlup{
+  position:fixed;top:50%;left:50%;
+  transform:translate(-50%,-50%) scale(.5);
+  background:var(--surface);
+  border:2px solid var(--gold);
+  border-radius:24px;
+  padding:28px 48px;
+  text-align:center;
+  box-shadow:0 20px 60px rgba(0,0,0,.15),0 0 0 8px var(--gold-glow);
+  z-index:9980;opacity:0;pointer-events:none;
+  transition:all .45s cubic-bezier(.34,1.56,.64,1)
+}
+.lvlup.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.lvlup-tag{
+  font-size:10px;font-weight:600;letter-spacing:3px;
+  text-transform:uppercase;color:var(--gold);margin-bottom:4px
+}
+.lvlup-num{
+  font-family:Georgia,'Times New Roman',serif;
+  font-size:56px;font-weight:600;line-height:1;color:var(--text)
+}
+.lvlup-sub{font-size:13px;color:var(--text2);margin-top:4px}
+
+/* ── GAME OVER ── */
+.gover{
+  position:fixed;inset:0;
+  background:rgba(28,24,20,.65);
+  backdrop-filter:blur(10px);
+  display:flex;align-items:center;justify-content:center;
+  z-index:10000;opacity:0;pointer-events:none;
+  transition:opacity .4s ease
+}
+.gover.show{opacity:1;pointer-events:all}
+.gover-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:28px;
+  padding:44px 40px;
+  text-align:center;
+  box-shadow:0 32px 80px rgba(0,0,0,.2);
+  max-width:320px;width:90%;
+  transform:translateY(24px) scale(.96);
+  transition:all .45s cubic-bezier(.34,1.56,.64,1)
+}
+.gover.show .gover-card{transform:none}
+.gover-title{
+  font-family:Georgia,'Times New Roman',serif;
+  font-size:36px;font-weight:600;color:var(--text)
+}
+.gover-sub{font-size:12px;color:var(--text2);margin-top:4px;letter-spacing:1px}
+.gover-score{
+  font-family:Georgia,'Times New Roman',serif;
+  font-size:64px;font-weight:600;color:var(--gold);
+  line-height:1;margin:14px 0 4px
+}
+.gover-level{font-size:13px;color:var(--text2);margin-bottom:28px}
+.btn{
+  background:var(--text);color:#fff;
+  border:none;border-radius:12px;
+  padding:13px 32px;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:14px;font-weight:500;
+  cursor:pointer;letter-spacing:.3px;
+  transition:all .2s ease
+}
+.btn:hover{background:var(--gold);transform:translateY(-2px);box-shadow:0 6px 20px rgba(184,146,58,.35)}
+.btn:active{transform:translateY(0)}
+
+/* ── IN-GAME ACTIONS ── */
+.game-actions{
+  display:flex;gap:8px;margin-top:14px;
+  width:100%;max-width:340px;
+  animation:fadeUp .6s .35s ease both;
+}
+.act-btn{
+  flex:1;padding:10px 0;border:none;border-radius:11px;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  font-size:13px;font-weight:500;
+  cursor:pointer;transition:all .18s ease;letter-spacing:.2px;
+}
+.act-restart{
+  background:var(--surface2);color:var(--text2);
+  border:1px solid var(--border2);
+  box-shadow:0 2px 8px var(--shadow);
+}
+.act-restart:hover{background:var(--border);color:var(--text);transform:translateY(-2px);box-shadow:0 4px 14px var(--shadow2);}
+.act-end{
+  background:var(--text);color:#fff;
+  box-shadow:0 3px 12px var(--shadow2);
+}
+.act-end:hover{background:var(--gold);transform:translateY(-2px);box-shadow:0 6px 18px rgba(184,146,58,.38);}
+.act-btn:active{transform:translateY(0);}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeDown{
+  from{opacity:0;transform:translateY(-16px)}
+  to{opacity:1;transform:none}
+}
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(16px)}
+  to{opacity:1;transform:none}
+}
+@keyframes statFlash{
+  0%,100%{color:var(--text)}
+  50%{color:var(--gold)}
+}
+/* Single drop animation for all concentric rings (all use translate(-50%,-50%)) */
+@keyframes ringDropC{
+  0%  {opacity:0;transform:translate(-50%,-50%) scale(0) rotate(150deg)}
+  60% {transform:translate(-50%,-50%) scale(1.18) rotate(-8deg);opacity:1}
+  100%{transform:translate(-50%,-50%) scale(1) rotate(0);opacity:1}
+}
+/* cellClear: subtle glow on the cell background only — rings dissolve separately */
+@keyframes cellClear{
+  0%  {box-shadow:inset 0 1px 3px rgba(0,0,0,.04),inset 0 -1px 2px rgba(255,255,255,.7)}
+  40% {box-shadow:inset 0 0 0 2px rgba(184,146,58,.35),0 0 12px rgba(184,146,58,.2)}
+  100%{box-shadow:inset 0 1px 3px rgba(0,0,0,.04),inset 0 -1px 2px rgba(255,255,255,.7)}
+}
+
+/* ── HINT TEXT ── */
+.hint{
+  text-align:center;font-size:11px;color:var(--text2);
+  margin-top:12px;letter-spacing:.3px;line-height:1.6
+}
+
+/* ── SHIMMER LINE ── */
+.shimmer-line{
+  width:40px;height:2px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);
+  margin:8px auto;border-radius:1px;
+  animation:shimmerSlide 2s infinite
+}
+@keyframes shimmerSlide{
+  0%{background-position:-100px}
+  100%{background-position:100px}
+}
+
+/* Ripple effect on cell */
+.ripple{
+  position:absolute;inset:0;border-radius:13px;
+  pointer-events:none;
+  background:radial-gradient(circle,rgba(184,146,58,.4) 0%,transparent 70%);
+  animation:rippleOut .5s ease forwards
+}
+@keyframes rippleOut{
+  from{opacity:1;transform:scale(.5)}
+  to{opacity:0;transform:scale(1.5)}
+}
+
+/* Shake for invalid */
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-6px)}
+  75%{transform:translateX(6px)}
+}
+
+.no-place-tip{
+  position:fixed;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  background:rgba(28,24,20,.85);
+  color:#fff;padding:10px 20px;border-radius:10px;
+  font-size:13px;letter-spacing:.5px;
+  pointer-events:none;z-index:9995;
+  opacity:0;transition:opacity .3s
+}
+.no-place-tip.show{opacity:1}
+
+/* ── LAYOUT ── */
+.game-main{
+  display:flex;flex-direction:column;align-items:center;
+  flex-shrink:0;
+}
+</style>
+</head>
+<body>
+
+<div class="game-main">
+<div class="hd">
+  <div class="hd-deco">
+    <div class="hd-deco-line"></div>
+    <div class="hd-deco-gem"></div>
+    <div class="hd-deco-line r"></div>
+  </div>
+  <div class="hd-title">Ring <em>Drop</em></div>
+  <div class="hd-sub">环落 · Match &amp; Clear</div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-label">Score</div>
+    <div class="stat-val" id="score-el">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Level</div>
+    <div class="stat-val" id="level-el">1</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Best</div>
+    <div class="stat-val" id="best-el">0</div>
+  </div>
+</div>
+
+<div class="progress-wrap">
+  <div class="progress-labels">
+    <span id="prog-cur">0 pts</span>
+    <span id="prog-next">300 pts to Lv.2</span>
+  </div>
+  <div class="progress-track">
+    <div class="progress-fill" id="prog-fill"></div>
+  </div>
+</div>
+
+<div class="grid-wrap">
+  <div class="grid-card">
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<div class="tray-section">
+  <div class="tray-label">Drag to Place · 拖拽放置</div>
+  <div class="tray" id="tray"></div>
+  <div class="colors-row" id="colors-row"></div>
+</div>
+
+<div class="game-actions">
+  <button class="act-btn act-restart" onclick="G.restart()">↺ 重来</button>
+  <button class="act-btn act-end" onclick="G.showGameOver()">✓ 结算</button>
+</div>
+
+<div class="hint">
+  横行·斜线：<span style="color:var(--gold)">同色同大小</span> × 3 → 消除<br>
+  同格：三种大小同色 → 全消 &nbsp;｜&nbsp; 大套中套小
+</div>
+
+<div id="ghost"></div>
+</div><!-- /.game-main -->
+
+<div class="gover" id="gover">
+  <div class="gover-card">
+    <div class="gover-title">Game Over</div>
+    <div class="gover-sub">No valid placements remain</div>
+    <div class="shimmer-line"></div>
+    <div class="gover-score" id="gover-score">0</div>
+    <div class="gover-level" id="gover-level">Reached Level 1</div>
+    <button class="btn" onclick="G.restart()">Play Again ↺</button>
+  </div>
+</div>
+
+<div class="lvlup" id="lvlup">
+  <div class="lvlup-tag">Level Up!</div>
+  <div class="lvlup-num" id="lvlup-num">2</div>
+  <div class="lvlup-sub" id="lvlup-sub">New color unlocked</div>
+</div>
+
+<div class="no-place-tip" id="no-tip">This slot is occupied</div>
+
+<script>
+/* ─────────────────────────────────────────
+   RING DROP · Game Engine
+───────────────────────────────────────── */
+
+const COLORS = [
+  { id:'c1', hex:'#D94F3D', name:'Crimson'  },
+  { id:'c2', hex:'#E8A020', name:'Saffron'  },
+  { id:'c3', hex:'#2E7DD1', name:'Cobalt'   },
+  { id:'c4', hex:'#2AAD6F', name:'Jade'     },
+  { id:'c5', hex:'#9B4DCA', name:'Amethyst' },
+  { id:'c6', hex:'#E06020', name:'Tangerine'},
+];
+const SIZES = ['small','medium','large'];
+const LEVEL_PTS = 300; // pts per level
+const TRAY_SIZE = 3;
+
+function colorsForLevel(lv){
+  // Minimum 3 colors from start; grows with level
+  if(lv<=1) return COLORS.slice(0,3);
+  if(lv<=3) return COLORS.slice(0,4);
+  if(lv<=5) return COLORS.slice(0,5);
+  return COLORS;
+}
+
+// ── Ring (donut) style helper ──
+// Returns an inline style string: thick colored border, transparent center
+function hexToRgb(h){
+  const r=parseInt(h.slice(1,3),16);
+  const g=parseInt(h.slice(3,5),16);
+  const b=parseInt(h.slice(5,7),16);
+  return[r,g,b];
+}
+// Border widths per size — scaled to match concentric visual sizes
+// cell:  large=72px, medium=44px, small=22px
+// tray:  large=70px, medium=46px, small=24px
+const BW={
+  cell:   {small:4, medium:8,  large:13},
+  tray:   {small:5, medium:9,  large:13},
+  ghost:  {small:5, medium:9,  large:14},
+};
+function ringStyle(hex,size,ctx='cell'){
+  const bw=(BW[ctx]||BW.cell)[size]||8;
+  const[r,g,b]=hexToRgb(hex);
+  // Outer glow + drop shadow + inner bevel (highlight top, shadow bottom) → 3D ring feel
+  const glow    =`0 4px 20px rgba(${r},${g},${b},.5)`;
+  const drop    =`0 2px 6px rgba(0,0,0,.14)`;
+  const hiInner =`inset 0 ${bw<8?2:3}px ${bw<8?4:6}px rgba(255,255,255,.38)`;
+  const shInner =`inset 0 -${bw<8?2:3}px ${bw<8?4:6}px rgba(0,0,0,.22)`;
+  return `border:${bw}px solid ${hex};background:transparent;box-shadow:${glow},${drop},${hiInner},${shInner};`;
+}
+
+// ── State ──
+const G = {
+  grid: null,   // [3][3] = {small:colorIdx|null, medium:colorIdx|null, large:colorIdx|null}
+  tray: null,   // [{size,colorIdx,used}]
+  score: 0,
+  best: +localStorage.getItem('ringdrop-best')||0,
+  level: 1,
+  over: false,
+  animating: false,
+
+  init(){
+    this.grid = Array.from({length:3},()=>
+      Array.from({length:3},()=>({small:null,medium:null,large:null}))
+    );
+    this.score=0; this.level=1; this.over=false; this.animating=false;
+    this.newTray();
+    this.render();
+    document.getElementById('gover').classList.remove('show');
+  },
+
+  restart(){
+    this.init();
+  },
+
+  newTray(){
+    const cols=colorsForLevel(this.level);
+    this.tray=Array.from({length:TRAY_SIZE},()=>({
+      size: SIZES[Math.floor(Math.random()*3)],
+      colorIdx: Math.floor(Math.random()*cols.length),
+    }));
+  },
+
+  newTrayItem(){
+    const cols=colorsForLevel(this.level);
+    return{
+      size: SIZES[Math.floor(Math.random()*3)],
+      colorIdx: Math.floor(Math.random()*cols.length),
+    };
+  },
+
+  render(){
+    this.renderGrid();
+    this.renderTray();
+    this.renderHUD();
+    this.renderColors();
+  },
+
+  renderGrid(){
+    const el=document.getElementById('grid');
+    el.innerHTML='';
+    for(let r=0;r<3;r++){
+      for(let c=0;c<3;c++){
+        const cell=this.grid[r][c];
+        const div=document.createElement('div');
+        div.className='cell';
+        div.dataset.r=r; div.dataset.c=c;
+
+        // Render each size zone
+        for(const sz of SIZES){
+          if(cell[sz]!==null){
+            const hex=COLORS[cell[sz]].hex;
+            const cz=document.createElement('div');
+            cz.className=`cz cz-${sz}`;
+            const ring=document.createElement('div');
+            ring.className='ring';
+            ring.style.cssText=ringStyle(hex,sz,'cell');
+            cz.appendChild(ring);
+            div.appendChild(cz);
+          }
+        }
+
+        el.appendChild(div);
+      }
+    }
+  },
+
+  renderTray(newIdx=-1){
+    const el=document.getElementById('tray');
+    el.innerHTML='';
+    const LABELS={small:'小',medium:'中',large:'大'};
+    this.tray.forEach((item,i)=>{
+      const slot=document.createElement('div');
+      slot.className=`tslot tslot-sz-${item.size}`;
+      if(i===newIdx) slot.classList.add('new-item');
+
+      // Ring area wrapper (fixed height, centers ring regardless of size)
+      const area=document.createElement('div');
+      area.className='tslot-ring-area';
+
+      const hex=COLORS[item.colorIdx].hex;
+      const ring=document.createElement('div');
+      ring.className='ring';
+      ring.style.cssText=ringStyle(hex,item.size,'tray');
+      area.appendChild(ring);
+      slot.appendChild(area);
+
+      // Size label
+      const lbl=document.createElement('div');
+      lbl.className='tslot-label';
+      lbl.textContent=LABELS[item.size];
+      slot.appendChild(lbl);
+
+      slot.addEventListener('mousedown',e=>drag.start(i,e));
+      slot.addEventListener('touchstart',e=>drag.start(i,e),{passive:false});
+      el.appendChild(slot);
+    });
+  },
+
+  renderHUD(){
+    document.getElementById('score-el').textContent=this.score;
+    document.getElementById('level-el').textContent=this.level;
+    document.getElementById('best-el').textContent=this.best;
+
+    const base=(this.level-1)*LEVEL_PTS;
+    const next=this.level*LEVEL_PTS;
+    const pct=Math.min(100,Math.max(0,((this.score-base)/(next-base))*100));
+    document.getElementById('prog-fill').style.width=pct+'%';
+    document.getElementById('prog-cur').textContent=this.score+' pts';
+    document.getElementById('prog-next').textContent=(next-this.score)+' to Lv.'+(this.level+1);
+  },
+
+  renderColors(){
+    const el=document.getElementById('colors-row');
+    el.innerHTML='';
+    colorsForLevel(this.level).forEach(c=>{
+      const d=document.createElement('div');
+      d.className='cdot';
+      d.style.background=c.hex;
+      d.title=c.name;
+      el.appendChild(d);
+    });
+  },
+
+  place(trayIdx,r,c){
+    if(this.over||this.animating) return;
+    const item=this.tray[trayIdx];
+    if(!item) return;
+    const cell=this.grid[r][c];
+    if(cell[item.size]!==null){
+      // Show invalid
+      showTip('该尺寸已有环');
+      const cellEl=document.querySelector(`[data-r="${r}"][data-c="${c}"]`);
+      cellEl.style.animation='shake .3s ease';
+      setTimeout(()=>cellEl.style.animation='',350);
+      return;
+    }
+
+    // Place
+    cell[item.size]=item.colorIdx;
+    this.animating=true;
+
+    // Immediately generate new item for this tray slot
+    this.tray[trayIdx]=this.newTrayItem();
+
+    this.renderGrid();
+    this.renderTray(trayIdx); // pass index so new item animates in
+
+    // Animate placed ring
+    const cellEl=document.querySelector(`[data-r="${r}"][data-c="${c}"]`);
+    const cz=cellEl.querySelector(`.cz-${item.size}`);
+    if(cz){cz.classList.add('placed');setTimeout(()=>cz.classList.remove('placed'),500)}
+
+    // Ripple
+    const rip=document.createElement('div');
+    rip.className='ripple';
+    cellEl.appendChild(rip);
+    setTimeout(()=>rip.remove(),500);
+
+    setTimeout(()=>this.checkAndClear(),350);
+  },
+
+  checkAndClear(){
+    const elims=findEliminations(this.grid);
+    if(elims.length>0){
+      this.applyEliminations(elims);
+    } else {
+      this.animating=false;
+      this.afterPlace();
+    }
+  },
+
+  applyEliminations(elims){
+    // 1. Collect pieces to remove, deduplicated
+    const toRemove=new Map(); // "r,c,sz" → {r,c,sz,colorIdx}
+    elims.forEach(({type,cells,colorIdx,size})=>{
+      cells.forEach(([r,c])=>{
+        const cell=this.grid[r][c];
+        if(type==='cell'){
+          SIZES.forEach(sz=>{ if(cell[sz]!==null) toRemove.set(`${r},${c},${sz}`,{r,c,sz,colorIdx:cell[sz]}); });
+        } else {
+          toRemove.set(`${r},${c},${size}`,{r,c,sz:size,colorIdx});
+        }
+      });
+    });
+
+    const combo=elims.length;
+    const pts=toRemove.size*10*combo;
+    const oldScore=this.score;
+
+    // 2. Dissolve matching cz elements in-place + gather screen positions
+    const pieces=[];
+    toRemove.forEach(({r,c,sz,colorIdx})=>{
+      const cellEl=document.querySelector(`[data-r="${r}"][data-c="${c}"]`);
+      if(cellEl){
+        const cz=cellEl.querySelector(`.cz-${sz}`);
+        if(cz) cz.classList.add('dissolving');
+        // Subtle cell glow
+        cellEl.classList.add('clearing');
+        setTimeout(()=>cellEl.classList.remove('clearing'),600);
+        const rect=cellEl.getBoundingClientRect();
+        pieces.push({cx:rect.left+rect.width/2,cy:rect.top+rect.height/2,hex:COLORS[colorIdx].hex,size:sz});
+      }
+    });
+
+    // 3. Remove from state
+    toRemove.forEach(({r,c,sz})=>{ this.grid[r][c][sz]=null; });
+
+    // 4. Update score state, best
+    this.score+=pts;
+    if(this.score>this.best){
+      this.best=this.score;
+      localStorage.setItem('ringdrop-best',this.best);
+    }
+
+    // 5. Level up?
+    const newLv=Math.floor(this.score/LEVEL_PTS)+1;
+    if(newLv>this.level){
+      const oldColors=colorsForLevel(this.level).length;
+      this.level=newLv;
+      showLevelUp(this.level,colorsForLevel(this.level).length>oldColors);
+    }
+
+    // 6. Combo badge near score area
+    if(combo>1){
+      const sr=document.getElementById('score-el').getBoundingClientRect();
+      const badge=document.createElement('div');
+      badge.className='combo-badge';
+      badge.textContent=`×${combo} COMBO`;
+      badge.style.cssText=`left:${sr.right+10}px;top:${sr.top}px;`;
+      document.body.appendChild(badge);
+      setTimeout(()=>badge.remove(),950);
+    }
+
+    // 7. Shard animation — flies to score, increments display
+    const TOTAL_DUR=820;
+    shatterToScore(pieces,pts,oldScore);
+
+    // 8. Re-render after animation completes, then chain-check
+    setTimeout(()=>{
+      this.renderGrid();
+      this.renderHUD();
+      const chain=findEliminations(this.grid);
+      if(chain.length>0){
+        setTimeout(()=>this.applyEliminations(chain),120);
+      } else {
+        this.animating=false;
+        this.afterPlace();
+      }
+    },TOTAL_DUR);
+  },
+
+  afterPlace(){
+    this.renderHUD();
+    // Check game over
+    if(this.isGameOver()){
+      setTimeout(()=>this.showGameOver(),600);
+    }
+  },
+
+  isGameOver(){
+    // Game over if none of the 3 tray items can be placed anywhere
+    for(const item of this.tray){
+      for(let r=0;r<3;r++){
+        for(let c=0;c<3;c++){
+          if(this.grid[r][c][item.size]===null) return false;
+        }
+      }
+    }
+    return true;
+  },
+
+  showGameOver(){
+    this.over=true;
+    document.getElementById('gover-score').textContent=this.score;
+    document.getElementById('gover-level').textContent=`Reached Level ${this.level}`;
+
+    document.getElementById('gover').classList.add('show');
+  }
+};
+
+/* ─ Elimination Logic ─ */
+function cellHasColor(cell,idx){
+  return cell.small===idx||cell.medium===idx||cell.large===idx;
+}
+
+function findEliminations(grid){
+  const found=[];
+  const added=new Set();
+
+  // size='' for same-cell triple (removes all 3), or 'small'/'medium'/'large' for lines
+  function add(type,cells,colorIdx,size=''){
+    const key=`${type}-${cells.map(([r,c])=>`${r}${c}`).join('')}-${colorIdx}-${size}`;
+    if(!added.has(key)){added.add(key);found.push({type,cells,colorIdx,size});}
+  }
+
+  // Same-cell triple: all 3 sizes hold the same color
+  for(let r=0;r<3;r++){
+    for(let c=0;c<3;c++){
+      const cell=grid[r][c];
+      if(cell.small!==null&&cell.small===cell.medium&&cell.medium===cell.large){
+        add('cell',[[r,c]],cell.small,'');
+      }
+    }
+  }
+
+  // Lines: rows, cols, diagonals
+  // Rule: same SIZE AND same COLOR in all 3 cells of the line
+  const lines=[
+    [[0,0],[0,1],[0,2]],
+    [[1,0],[1,1],[1,2]],
+    [[2,0],[2,1],[2,2]],
+    [[0,0],[1,0],[2,0]],
+    [[0,1],[1,1],[2,1]],
+    [[0,2],[1,2],[2,2]],
+    [[0,0],[1,1],[2,2]],
+    [[0,2],[1,1],[2,0]],
+  ];
+  const lineTypes=['row','row','row','col','col','col','diag','diag'];
+
+  lines.forEach((line,li)=>{
+    const type=lineTypes[li];
+    for(const sz of SIZES){
+      for(let idx=0;idx<COLORS.length;idx++){
+        // All 3 cells must have this exact size slot = this colorIdx
+        if(line.every(([r,c])=>grid[r][c][sz]===idx)){
+          add(type,line,idx,sz);
+        }
+      }
+    }
+  });
+
+  return found;
+}
+
+/* ─ Drag System ─ */
+const drag={
+  active:false,trayIdx:-1,colorIdx:-1,size:'',
+  sx:0,sy:0,
+
+  start(idx,e){
+    if(G.over||G.animating) return;
+    const item=G.tray[idx];
+    if(!item) return;
+    e.preventDefault();
+    const{x,y}=xy(e);
+    this.active=true; this.trayIdx=idx;
+    this.colorIdx=item.colorIdx; this.size=item.size;
+
+    const ghost=document.getElementById('ghost');
+    const szPx={small:34,medium:50,large:66}[item.size];
+    const hex=COLORS[item.colorIdx].hex;
+    const gs=ringStyle(hex,item.size,'ghost');
+    ghost.style.cssText=`display:block;width:${szPx}px;height:${szPx}px;left:${x}px;top:${y}px;${gs}`;
+
+    // Mark slot as dragging
+    const slots=document.querySelectorAll('.tslot');
+    slots[idx]?.classList.add('dragging');
+
+    document.addEventListener('mousemove',this._move);
+    document.addEventListener('mouseup',this._end);
+    document.addEventListener('touchmove',this._move,{passive:false});
+    document.addEventListener('touchend',this._end);
+  },
+
+  move(e){
+    if(!this.active) return;
+    e.preventDefault();
+    const{x,y}=xy(e);
+    const ghost=document.getElementById('ghost');
+    ghost.style.left=x+'px'; ghost.style.top=y+'px';
+
+    // Clear all highlights
+    document.querySelectorAll('.cell').forEach(el=>{
+      el.classList.remove('over-valid','over-invalid');
+      el.style.borderColor=''; el.style.background='';
+    });
+    const target=cellAt(x,y);
+    if(target){
+      const r=+target.dataset.r,c=+target.dataset.c;
+      const canPlace=G.grid[r][c][drag.size]===null;
+      if(canPlace){
+        const hex=COLORS[drag.colorIdx].hex;
+        const[rv,gv,bv]=hexToRgb(hex);
+        target.classList.add('over-valid');
+        target.style.borderColor=hex;
+        target.style.background=`rgba(${rv},${gv},${bv},.1)`;
+        target.style.setProperty('--hover-glow',`rgba(${rv},${gv},${bv},.28)`);
+      } else {
+        target.classList.add('over-invalid');
+      }
+    }
+  },
+
+  end(e){
+    if(!this.active) return;
+    document.removeEventListener('mousemove',this._move);
+    document.removeEventListener('mouseup',this._end);
+    document.removeEventListener('touchmove',this._move);
+    document.removeEventListener('touchend',this._end);
+
+    document.getElementById('ghost').style.display='none';
+    document.querySelectorAll('.cell').forEach(el=>{
+      el.classList.remove('over-valid','over-invalid');
+      el.style.borderColor=''; el.style.background='';
+    });
+    document.querySelectorAll('.tslot').forEach(el=>el.classList.remove('dragging'));
+
+    const{x,y}=xy2(e);
+    const target=cellAt(x,y);
+    if(target) G.place(this.trayIdx,+target.dataset.r,+target.dataset.c);
+
+    this.active=false;
+  }
+};
+drag._move=drag.move.bind(drag);
+drag._end=drag.end.bind(drag);
+
+function xy(e){
+  if(e.touches) return{x:e.touches[0].clientX,y:e.touches[0].clientY};
+  return{x:e.clientX,y:e.clientY};
+}
+function xy2(e){
+  if(e.changedTouches) return{x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY};
+  return{x:e.clientX,y:e.clientY};
+}
+function cellAt(x,y){
+  for(const el of document.querySelectorAll('.cell')){
+    const r=el.getBoundingClientRect();
+    if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom) return el;
+  }
+  return null;
+}
+
+/* ─ Shard Effect: arc fragments fly from cell to score counter ─ */
+function shatterToScore(pieces,pts,startScore){
+  if(!pieces.length) return;
+  const scoreEl=document.getElementById('score-el');
+  const SHARDS=5; // per piece
+  const total=pieces.length*SHARDS;
+  let arrived=0;
+  let disp=startScore; // displayed value, ticks up
+  const perShard=pts/total;
+
+  pieces.forEach(({cx,cy,hex,size})=>{
+    const bw={small:3,medium:5,large:8}[size]||5;
+    const aw={small:12,medium:18,large:26}[size]||16; // arc element size
+
+    for(let i=0;i<SHARDS;i++){
+      const el=document.createElement('div');
+      el.className='shard';
+      const startRot=(i/SHARDS)*360; // evenly spaced arc orientations
+      const delay=i*38+Math.random()*20;
+      const dur=660+Math.random()*180;
+
+      // Two border sides visible = quarter-arc look
+      el.style.cssText=[
+        `width:${aw}px`,`height:${aw}px`,
+        `border:${bw}px solid transparent`,
+        `border-top-color:${hex}`,`border-right-color:${hex}`,
+        `left:${cx}px`,`top:${cy}px`
+      ].join(';');
+      document.body.appendChild(el);
+
+      setTimeout(()=>{
+        if(!el.isConnected) return;
+        // Re-read score el position at animation time (user may have scrolled)
+        const sr=scoreEl.getBoundingClientRect();
+        const dx=sr.left+sr.width/2-cx;
+        const dy=sr.top+sr.height/2-cy;
+        // Bezier control point: arc up/sideways then converge to score
+        const sc=(Math.random()-.5)*100;
+        const lf=-30-Math.random()*50;
+
+        el.animate([
+          {transform:`translate(-50%,-50%) rotate(${startRot}deg)`,opacity:1},
+          {transform:`translate(calc(-50% + ${dx*.35+sc}px),calc(-50% + ${dy*.2+lf}px)) rotate(${startRot+240}deg)`,opacity:.9,offset:.4},
+          {transform:`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) rotate(${startRot+520}deg) scale(.06)`,opacity:0}
+        ],{duration:dur,easing:'cubic-bezier(.4,0,.55,1)',fill:'forwards'});
+
+        // On arrival: tick score display up
+        setTimeout(()=>{
+          el.remove();
+          arrived++;
+          disp+=perShard;
+          // Display the ticking value (never exceed final score)
+          scoreEl.textContent=Math.min(G.score,Math.round(disp));
+          // Subtle color pulse: tint to ring color momentarily
+          scoreEl.style.color=hex;
+          setTimeout(()=>{ scoreEl.style.color=''; },110);
+        },dur);
+      },delay);
+    }
+  });
+}
+
+function showLevelUp(lv,newColor){
+  document.getElementById('lvlup-num').textContent=lv;
+  document.getElementById('lvlup-sub').textContent=
+    newColor?`New color unlocked · ${COLORS[colorsForLevel(lv).length-1].name}`:'Keep going!';
+  const el=document.getElementById('lvlup');
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2200);
+  G.renderColors();
+}
+
+let tipTimer=null;
+function showTip(msg){
+  const el=document.getElementById('no-tip');
+  el.textContent=msg;
+  el.classList.add('show');
+  clearTimeout(tipTimer);
+  tipTimer=setTimeout(()=>el.classList.remove('show'),1500);
+}
+
+/* ─ Boot ─ */
+G.init();
+</script>
+</body>
+</html>

@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Devil Snake · 恶魔贪吃蛇</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#F5F0E8;
+  --surface:#FEFCF8;
+  --surface2:#EDE6D8;
+  --border:#D4C9B5;
+  --border2:#C0B09C;
+  --text:#1C1008;
+  --text2:#7A6A58;
+  --text3:#A8947C;
+  --crimson:#C41E3A;
+  --crimson2:#8B1428;
+  --gold:#B8962E;
+  --gold2:#D4AF37;
+  --purple:#7C3AED;
+  --blue:#2563EB;
+  --teal:#0F766E;
+  --orange:#C2410C;
+  --shadow:rgba(28,16,8,.09);
+  --shadow2:rgba(28,16,8,.18);
+}
+
+html,body{
+  width:100%;min-height:100vh;
+  background:var(--bg);
+  font-family:'Palatino Linotype','Palatino','Book Antiqua',Georgia,serif;
+  color:var(--text);
+  overflow-x:hidden;
+}
+
+/* ══ INTRO SCREEN ══ */
+#screen-intro{
+  min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  padding:52px 16px 72px;
+  background:
+    radial-gradient(ellipse 80% 55% at 50% -8%, rgba(196,30,58,.1) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 45% at 5% 95%, rgba(184,150,46,.07) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 40% at 95% 20%, rgba(124,58,237,.04) 0%, transparent 50%);
+}
+
+/* Title block */
+.intro-deco{
+  display:flex;align-items:center;gap:12px;margin-bottom:10px;
+  animation:fadeDown .7s ease both;
+}
+.deco-line{
+  width:40px;height:1px;
+  background:linear-gradient(90deg,transparent,var(--crimson));
+}
+.deco-line.r{background:linear-gradient(90deg,var(--crimson),transparent);}
+.deco-gem{
+  width:7px;height:7px;border-radius:1px;
+  background:var(--crimson);transform:rotate(45deg);
+  box-shadow:0 0 8px rgba(196,30,58,.5);
+  animation:gemPulse 2.4s ease infinite;
+}
+@keyframes gemPulse{
+  0%,100%{box-shadow:0 0 8px rgba(196,30,58,.5)}
+  50%{box-shadow:0 0 18px rgba(196,30,58,.9)}
+}
+
+.intro-title{
+  font-size:clamp(38px,8vw,64px);
+  font-weight:normal;
+  letter-spacing:-1px;
+  line-height:1;
+  color:var(--text);
+  text-align:center;
+  animation:fadeDown .7s .05s ease both;
+}
+.intro-title em{
+  font-style:italic;
+  color:var(--crimson);
+  letter-spacing:-2px;
+}
+.intro-sub{
+  font-size:11px;font-weight:400;
+  letter-spacing:5px;text-transform:uppercase;
+  color:var(--text3);margin-top:8px;
+  animation:fadeDown .7s .1s ease both;
+}
+
+.intro-tagline{
+  margin-top:22px;
+  max-width:480px;text-align:center;
+  font-size:14px;line-height:1.8;color:var(--text2);
+  animation:fadeDown .7s .15s ease both;
+}
+.intro-tagline strong{color:var(--crimson);}
+
+/* Section heading */
+.section-head{
+  display:flex;align-items:center;gap:10px;
+  margin:36px 0 18px;
+  animation:fadeDown .7s .2s ease both;
+}
+.section-head-line{flex:1;height:1px;background:var(--border);}
+.section-head-text{
+  font-size:10px;font-weight:400;letter-spacing:4px;
+  text-transform:uppercase;color:var(--text3);
+  white-space:nowrap;
+}
+
+/* Power-up cards */
+.cards-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:10px;
+  width:100%;max-width:680px;
+  animation:fadeUp .7s .25s ease both;
+}
+@media(max-width:600px){
+  .cards-grid{grid-template-columns:repeat(2,1fr);}
+}
+
+.pu-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:14px 14px 12px;
+  position:relative;overflow:hidden;
+  transition:transform .2s ease,box-shadow .2s ease;
+}
+.pu-card:hover{
+  transform:translateY(-3px);
+  box-shadow:0 10px 32px var(--shadow2);
+}
+.pu-card::before{
+  content:'';
+  position:absolute;left:0;top:0;bottom:0;
+  width:3px;border-radius:3px 0 0 3px;
+  background:var(--card-color,var(--crimson));
+}
+.pu-icon{
+  font-size:20px;line-height:1;margin-bottom:7px;
+  display:block;
+}
+.pu-name{
+  font-size:11px;font-weight:400;letter-spacing:1.5px;
+  color:var(--text);text-transform:uppercase;
+  margin-bottom:4px;
+}
+.pu-desc{
+  font-size:11px;color:var(--text2);line-height:1.5;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+}
+.pu-badge{
+  position:absolute;top:10px;right:10px;
+  font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  font-size:8px;letter-spacing:1px;
+  padding:2px 6px;border-radius:4px;
+  background:var(--card-color,var(--crimson));
+  color:#fff;opacity:.8;text-transform:uppercase;
+}
+
+/* Controls section */
+.controls-box{
+  width:100%;max-width:680px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:18px 24px;
+  display:flex;gap:32px;flex-wrap:wrap;justify-content:center;
+  animation:fadeUp .7s .3s ease both;
+}
+.ctrl-group{
+  display:flex;flex-direction:column;gap:6px;align-items:center;
+}
+.ctrl-label{
+  font-size:9px;letter-spacing:3px;text-transform:uppercase;
+  color:var(--text3);margin-bottom:2px;
+}
+.ctrl-keys{
+  display:flex;gap:4px;align-items:center;
+}
+.key{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:28px;height:28px;padding:0 8px;
+  background:var(--surface2);
+  border:1px solid var(--border2);
+  border-bottom:2.5px solid var(--border2);
+  border-radius:6px;
+  font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  font-size:11px;color:var(--text2);
+  box-shadow:0 1px 2px var(--shadow);
+}
+.ctrl-or{font-size:10px;color:var(--text3);margin:0 4px;}
+
+/* Start button */
+.start-btn{
+  margin-top:32px;
+  padding:16px 60px;
+  background:var(--crimson);
+  color:#fff;border:none;border-radius:14px;
+  font-family:'Palatino Linotype','Palatino',Georgia,serif;
+  font-size:16px;font-style:italic;
+  letter-spacing:.5px;
+  cursor:pointer;
+  box-shadow:0 6px 24px rgba(196,30,58,.35),0 2px 6px rgba(196,30,58,.2);
+  transition:all .22s ease;
+  animation:fadeUp .7s .35s ease both;
+  position:relative;overflow:hidden;
+}
+.start-btn::after{
+  content:'';
+  position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(255,255,255,.15) 0%,transparent 60%);
+  pointer-events:none;
+}
+.start-btn:hover{
+  background:var(--crimson2);
+  transform:translateY(-3px);
+  box-shadow:0 12px 36px rgba(196,30,58,.45),0 4px 10px rgba(196,30,58,.25);
+}
+.start-btn:active{transform:translateY(0)}
+
+/* ══ GAME SCREEN ══ */
+#screen-game{
+  display:none;
+  flex-direction:column;align-items:center;
+  min-height:100vh;
+  padding:20px 12px 24px;
+  background:
+    radial-gradient(ellipse 70% 40% at 50% 0%, rgba(196,30,58,.07) 0%, transparent 55%);
+}
+
+.game-hud{
+  width:100%;max-width:440px;
+  display:flex;align-items:stretch;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  margin-bottom:14px;
+  overflow:hidden;
+  box-shadow:0 4px 18px var(--shadow);
+}
+.hud-stat{
+  flex:1;padding:10px 16px;text-align:center;
+  border-right:1px solid var(--border);
+}
+.hud-stat:last-child{border-right:none}
+.hud-label{
+  font-size:8px;letter-spacing:3px;text-transform:uppercase;
+  color:var(--text3);margin-bottom:2px;
+}
+.hud-val{
+  font-size:24px;font-weight:normal;color:var(--text);
+  line-height:1;
+}
+
+/* Canvas wrapper */
+.canvas-wrap{
+  position:relative;
+  border-radius:18px;
+  overflow:hidden;
+  box-shadow:
+    0 16px 48px var(--shadow2),
+    0 4px 12px var(--shadow),
+    inset 0 1px 0 rgba(255,255,255,.9);
+  border:1px solid var(--border);
+}
+#game-canvas{display:block;background:#F8F4EE;}
+
+/* Effects bar */
+#effects-bar{
+  display:flex;gap:6px;flex-wrap:wrap;justify-content:center;
+  min-height:28px;margin-top:12px;
+  width:100%;max-width:440px;
+}
+.effect-chip{
+  display:flex;align-items:center;gap:5px;
+  padding:4px 10px 4px 7px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:20px;
+  font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  font-size:10px;color:var(--text2);
+  box-shadow:0 2px 8px var(--shadow);
+  animation:chipIn .25s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes chipIn{
+  from{opacity:0;transform:scale(.6)}
+  to{opacity:1;transform:scale(1)}
+}
+.effect-dot{
+  width:6px;height:6px;border-radius:50%;
+  flex-shrink:0;
+}
+.effect-timer{
+  font-variant-numeric:tabular-nums;
+  color:var(--text3);
+}
+
+/* Pause overlay */
+#pause-overlay{
+  position:absolute;inset:0;
+  background:rgba(245,240,232,.88);
+  backdrop-filter:blur(6px);
+  display:none;
+  flex-direction:column;align-items:center;justify-content:center;
+  z-index:10;
+  gap:8px;
+}
+#pause-overlay.show{display:flex}
+.pause-title{
+  font-size:28px;font-style:italic;color:var(--text);
+}
+.pause-sub{
+  font-size:11px;letter-spacing:3px;text-transform:uppercase;
+  color:var(--text3);
+  font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+}
+
+/* ══ GAME OVER ══ */
+#screen-gameover{
+  position:fixed;inset:0;
+  background:rgba(28,16,8,.65);
+  backdrop-filter:blur(12px);
+  display:none;
+  flex-direction:column;align-items:center;justify-content:center;
+  z-index:100;
+}
+#screen-gameover.show{display:flex}
+
+.go-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:28px;
+  padding:48px 44px;
+  text-align:center;
+  max-width:340px;width:90%;
+  box-shadow:0 32px 80px rgba(0,0,0,.2);
+  transform:translateY(20px) scale(.97);
+  transition:all .45s cubic-bezier(.34,1.56,.64,1);
+}
+#screen-gameover.show .go-card{transform:none}
+
+.go-tag{
+  font-size:9px;letter-spacing:4px;text-transform:uppercase;
+  color:var(--crimson);margin-bottom:6px;
+  font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+}
+.go-title{
+  font-size:40px;font-style:italic;color:var(--text);
+  line-height:1;margin-bottom:4px;
+}
+.go-divider{
+  width:36px;height:1.5px;
+  background:linear-gradient(90deg,transparent,var(--gold2),transparent);
+  margin:14px auto;
+}
+.go-score{
+  font-size:68px;font-weight:normal;
+  color:var(--crimson);line-height:1;
+}
+.go-score-label{
+  font-size:10px;letter-spacing:3px;text-transform:uppercase;
+  color:var(--text3);margin-top:4px;margin-bottom:2px;
+  font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+}
+.go-best{
+  font-size:14px;color:var(--text2);margin-bottom:32px;
+  font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+}
+.go-best span{color:var(--gold);font-weight:600;}
+.go-btns{display:flex;gap:10px;justify-content:center;}
+.go-btn{
+  padding:12px 28px;border:none;border-radius:11px;
+  font-family:'Palatino Linotype','Palatino',Georgia,serif;
+  font-size:14px;font-style:italic;
+  cursor:pointer;transition:all .2s ease;
+}
+.go-btn-primary{
+  background:var(--text);color:#fff;
+}
+.go-btn-primary:hover{background:var(--crimson);transform:translateY(-2px);box-shadow:0 6px 20px rgba(196,30,58,.35)}
+.go-btn-secondary{
+  background:var(--surface2);color:var(--text2);
+  border:1px solid var(--border);
+}
+.go-btn-secondary:hover{background:var(--border);transform:translateY(-2px)}
+
+/* ══ ANIMATIONS ══ */
+@keyframes fadeDown{
+  from{opacity:0;transform:translateY(-18px)}
+  to{opacity:1;transform:none}
+}
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(18px)}
+  to{opacity:1;transform:none}
+}
+
+/* Score flash */
+@keyframes hudFlash{
+  0%,100%{color:var(--text)}
+  40%{color:var(--crimson);transform:scale(1.12)}
+}
+.hud-val.flash{animation:hudFlash .3s ease}
+
+/* In-game action buttons */
+.game-actions{
+  display:flex;gap:8px;margin-top:10px;width:100%;max-width:440px;
+}
+.act-btn{
+  flex:1;padding:9px 0;border:none;border-radius:10px;
+  font-family:'Palatino Linotype','Palatino',Georgia,serif;
+  font-size:13px;font-style:italic;
+  cursor:pointer;transition:all .18s ease;
+  letter-spacing:.3px;
+}
+.act-restart{
+  background:var(--surface2);color:var(--text2);
+  border:1px solid var(--border2);
+}
+.act-restart:hover{background:var(--border);color:var(--text);transform:translateY(-2px);box-shadow:0 4px 12px var(--shadow);}
+.act-end{
+  background:var(--crimson);color:#fff;
+  box-shadow:0 3px 12px rgba(196,30,58,.28);
+}
+.act-end:hover{background:var(--crimson2);transform:translateY(-2px);box-shadow:0 6px 18px rgba(196,30,58,.38);}
+.act-btn:active{transform:translateY(0);}
+
+/* Hint */
+.game-hint{
+  margin-top:10px;
+  font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  font-size:10px;color:var(--text3);letter-spacing:.3px;
+}
+
+/* ══ GAME LAYOUT — two-column ══ */
+#screen-game{
+  flex-direction:row!important;
+  align-items:flex-start;
+  justify-content:center;
+  gap:20px;
+}
+.game-left{
+  display:flex;flex-direction:column;align-items:center;
+  flex-shrink:0;
+}
+@media(max-width:740px){
+  #screen-game{flex-direction:column!important;align-items:center;}
+}
+</style>
+</head>
+<body>
+
+<!-- ══ INTRO SCREEN ══ -->
+<div id="screen-intro">
+
+  <div class="intro-deco" style="animation-delay:0s">
+    <div class="deco-line"></div>
+    <div class="deco-gem"></div>
+    <div class="deco-line r"></div>
+  </div>
+
+  <h1 class="intro-title">Devil <em>Snake</em></h1>
+  <div class="intro-sub">恶魔贪吃蛇 · Cursed Edition</div>
+
+  <p class="intro-tagline">
+    这不是普通的贪吃蛇。<strong>随机道具</strong>随时颠覆局势——<br>
+    你控制方向，恶魔掌控规则。吃果子生长，拾道具祈祷命运。
+  </p>
+
+  <!-- Power-up cards -->
+  <div class="section-head" style="width:100%;max-width:680px">
+    <div class="section-head-line"></div>
+    <div class="section-head-text">道具说明</div>
+    <div class="section-head-line"></div>
+  </div>
+
+  <div class="cards-grid">
+    <div class="pu-card" style="--card-color:#9B4DCA">
+      <span class="pu-icon">↺</span>
+      <div class="pu-name">首尾颠倒</div>
+      <div class="pu-desc">蛇身翻转，方向反转，猝不及防</div>
+      <span class="pu-badge">即时</span>
+    </div>
+    <div class="pu-card" style="--card-color:#C2410C">
+      <span class="pu-icon">⟫</span>
+      <div class="pu-name">恶魔冲刺</div>
+      <div class="pu-desc">速度暴增三倍，持续 3 秒</div>
+      <span class="pu-badge">3 秒</span>
+    </div>
+    <div class="pu-card" style="--card-color:#2563EB">
+      <span class="pu-icon">≋</span>
+      <div class="pu-name">混沌律动</div>
+      <div class="pu-desc">速度随机混乱跳变，持续 5 秒</div>
+      <span class="pu-badge">5 秒</span>
+    </div>
+    <div class="pu-card" style="--card-color:#0F766E">
+      <span class="pu-icon">◎</span>
+      <div class="pu-name">幽灵附体</div>
+      <div class="pu-desc">可穿越四面墙壁，持续 5 秒</div>
+      <span class="pu-badge">5 秒</span>
+    </div>
+    <div class="pu-card" style="--card-color:#C41E3A">
+      <span class="pu-icon">✕</span>
+      <div class="pu-name">诅咒萎缩</div>
+      <div class="pu-desc">失去尾部四节，长度骤减</div>
+      <span class="pu-badge">即时</span>
+    </div>
+    <div class="pu-card" style="--card-color:#B8962E">
+      <span class="pu-icon">⏯</span>
+      <div class="pu-name">时间裂隙</div>
+      <div class="pu-desc">快慢节奏交替切换，持续 4 秒</div>
+      <span class="pu-badge">4 秒</span>
+    </div>
+    <div class="pu-card" style="--card-color:#334155">
+      <span class="pu-icon">◉</span>
+      <div class="pu-name">黑暗诅咒</div>
+      <div class="pu-desc">视野大范围遮蔽，持续 3 秒</div>
+      <span class="pu-badge">3 秒</span>
+    </div>
+    <div class="pu-card" style="--card-color:#D4AF37">
+      <span class="pu-icon">⬡</span>
+      <div class="pu-name">混沌传送</div>
+      <div class="pu-desc">整条蛇瞬移至随机位置</div>
+      <span class="pu-badge">即时</span>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="section-head" style="width:100%;max-width:680px">
+    <div class="section-head-line"></div>
+    <div class="section-head-text">操作方式</div>
+    <div class="section-head-line"></div>
+  </div>
+
+  <div class="controls-box">
+    <div class="ctrl-group">
+      <div class="ctrl-label">移动</div>
+      <div class="ctrl-keys">
+        <div style="display:flex;flex-direction:column;gap:3px;align-items:center">
+          <div class="key">↑</div>
+          <div style="display:flex;gap:3px">
+            <div class="key">←</div>
+            <div class="key">↓</div>
+            <div class="key">→</div>
+          </div>
+        </div>
+        <div class="ctrl-or">或</div>
+        <div style="display:flex;flex-direction:column;gap:3px;align-items:center">
+          <div class="key">W</div>
+          <div style="display:flex;gap:3px">
+            <div class="key">A</div>
+            <div class="key">S</div>
+            <div class="key">D</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-label">暂停</div>
+      <div class="ctrl-keys">
+        <div class="key">Space</div>
+        <div class="ctrl-or">或</div>
+        <div class="key">P</div>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-label">触屏</div>
+      <div style="font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;font-size:11px;color:var(--text2);text-align:center;line-height:1.7">
+        滑动屏幕<br>控制方向
+      </div>
+    </div>
+  </div>
+
+  <button class="start-btn" onclick="startGame()">开始游戏 →</button>
+
+</div>
+
+<!-- ══ GAME SCREEN ══ -->
+<div id="screen-game">
+  <!-- Left: HUD + canvas -->
+  <div class="game-left">
+    <div class="game-hud">
+      <div class="hud-stat">
+        <div class="hud-label">Score</div>
+        <div class="hud-val" id="hud-score">0</div>
+      </div>
+      <div class="hud-stat">
+        <div class="hud-label">Level</div>
+        <div class="hud-val" id="hud-level">1</div>
+      </div>
+      <div class="hud-stat">
+        <div class="hud-label">Best</div>
+        <div class="hud-val" id="hud-best">0</div>
+      </div>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas id="game-canvas"></canvas>
+      <div class="pause-overlay" id="pause-overlay">
+        <div class="pause-title">已暂停</div>
+        <div class="pause-sub">按空格或 P 继续</div>
+      </div>
+    </div>
+
+    <div id="effects-bar"></div>
+    <div class="game-actions">
+      <button class="act-btn act-restart" onclick="restartGame()">↺ 重来</button>
+      <button class="act-btn act-end"     onclick="endGame()">✓ 结算</button>
+    </div>
+    <div class="game-hint">←↑→↓ 移动 &nbsp;·&nbsp; Space 暂停</div>
+  </div>
+
+</div>
+
+<!-- ══ GAME OVER ══ -->
+<div id="screen-gameover">
+  <div class="go-card">
+    <div class="go-tag">Game Over</div>
+    <div class="go-title">命运终结</div>
+    <div class="go-divider"></div>
+    <div class="go-score-label">Final Score</div>
+    <div class="go-score" id="go-score">0</div>
+    <div class="go-best" id="go-best">历史最佳 <span>0</span></div>
+    <div class="go-btns">
+      <button class="go-btn go-btn-primary" onclick="restartGame()">再来一局 ↺</button>
+      <button class="go-btn go-btn-secondary" onclick="backToIntro()">返回主页</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+/* ═══════════════════════════════════════
+   DEVIL SNAKE · Game Engine
+═══════════════════════════════════════ */
+
+/* ── Constants ── */
+const COLS = 20, ROWS = 20, CELL = 22;
+const W = COLS * CELL, H = ROWS * CELL; // 440 × 440
+
+/* ── Power-up definitions ── */
+const PU_DEFS = {
+  REVERSE:     { name:'首尾颠倒', color:'#9B4DCA', duration:0,    icon:'↺' },
+  SPEED_BURST: { name:'恶魔冲刺', color:'#C2410C', duration:3000, icon:'⟫' },
+  CHAOS:       { name:'混沌律动', color:'#2563EB', duration:5000, icon:'≋' },
+  GHOST:       { name:'幽灵附体', color:'#0F766E', duration:5000, icon:'◎' },
+  SHRINK:      { name:'诅咒萎缩', color:'#C41E3A', duration:0,    icon:'✕' },
+  TIME_WARP:   { name:'时间裂隙', color:'#B8962E', duration:4000, icon:'⏯' },
+  BLIND:       { name:'黑暗诅咒', color:'#334155', duration:3000, icon:'◉' },
+  TELEPORT:    { name:'混沌传送', color:'#D4AF37', duration:0,    icon:'⬡' },
+};
+const PU_KEYS = Object.keys(PU_DEFS);
+
+/* ── Food definitions ── */
+const FOOD_DEFS = {
+  APPLE:  { color:'#D93030', glow:'rgba(217,48,48,.4)',  pts:4,  grow:1,  label:'果' },
+  CHERRY: { color:'#D0208A', glow:'rgba(208,32,138,.4)', pts:12, grow:2,  label:'双' },
+  LEMON:  { color:'#C49A20', glow:'rgba(196,154,32,.4)', pts:7,  grow:1,  label:'金' },
+};
+
+/* ── Canvas setup ── */
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+
+function setupCanvas() {
+  // Scale for device pixel ratio
+  const dpr = window.devicePixelRatio || 1;
+  const maxW = Math.min(window.innerWidth - 24, 440);
+  const scale = maxW / W;
+  const displayW = Math.round(W * scale);
+  const displayH = Math.round(H * scale);
+  canvas.style.width  = displayW + 'px';
+  canvas.style.height = displayH + 'px';
+  canvas.width  = displayW * dpr;
+  canvas.height = displayH * dpr;
+  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+}
+
+/* ── State ── */
+let snake, dir, nextDir, foods, score, best, level,
+    gameRunning, gamePaused, moveCount, growPending,
+    activeEffects, tickTimeout, animFrame, chaosTimeout,
+    touchStartX, touchStartY;
+
+
+function initState() {
+  snake = [{x:10,y:10},{x:9,y:10},{x:8,y:10},{x:7,y:10}];
+  dir = {x:1,y:0};
+  nextDir = {x:1,y:0};
+  foods = [];
+  powerups = [];
+  score = 0;
+  level = 1;
+  moveCount = 0;
+  growPending = 0;
+  activeEffects = [];
+  gameRunning = false;
+  gamePaused = false;
+  chaosTimeout = null;
+  best = +localStorage.getItem('devilsnake-best') || 0;
+  spawnFoods();
+}
+
+/* ── Food system ── */
+function randomEmptyCell(exclude=[]) {
+  const occupied = new Set([...snake, ...foods, ...powerups, ...exclude].map(p=>`${p.x},${p.y}`));
+  for(let i=0;i<200;i++){
+    const x=Math.floor(Math.random()*COLS);
+    const y=Math.floor(Math.random()*ROWS);
+    if(!occupied.has(`${x},${y}`)) return {x,y};
+  }
+  return null;
+}
+
+function spawnFoods() {
+  while(foods.length < 3) {
+    const pos = randomEmptyCell();
+    if(!pos) break;
+    const r = Math.random();
+    const type = r < 0.15 ? 'CHERRY' : r < 0.3 ? 'LEMON' : 'APPLE';
+    foods.push({...pos, type, age:0});
+  }
+}
+
+// powerup is now an array (max 2 slots at high levels)
+let powerups = [];
+
+function spawnPowerup() {
+  const maxOnBoard = level >= 5 ? 2 : 1;
+  if(powerups.length >= maxOnBoard) return;
+  const pos = randomEmptyCell();
+  if(!pos) return;
+  const type = PU_KEYS[Math.floor(Math.random()*PU_KEYS.length)];
+  powerups.push({...pos, type, pulse:0});
+}
+
+/* ── Effect helpers ── */
+function hasEffect(type) {
+  return activeEffects.some(e=>e.type===type && e.endTime>Date.now());
+}
+
+function addEffect(type) {
+  const def = PU_DEFS[type];
+  if(!def.duration) return; // instant effects have no ongoing state
+  // Remove if already active
+  activeEffects = activeEffects.filter(e=>e.type!==type);
+  activeEffects.push({ type, endTime: Date.now()+def.duration });
+}
+
+function cleanEffects() {
+  const now = Date.now();
+  activeEffects = activeEffects.filter(e=>e.endTime>now);
+}
+
+/* ── Speed ── */
+function getSpeed() {
+  let base = Math.max(52, 175 - (level-1)*16);
+  if(hasEffect('SPEED_BURST')) return Math.round(base * 0.28);
+  if(hasEffect('TIME_WARP')) {
+    const phase = Math.floor(Date.now()/380) % 2;
+    return phase === 0 ? Math.round(base*0.32) : Math.round(base*2.4);
+  }
+  if(hasEffect('CHAOS')) {
+    return 42 + Math.floor(Math.random()*160);
+  }
+  return base;
+}
+
+/* ── Apply power-up ── */
+function applyPowerup(type) {
+  switch(type) {
+    case 'REVERSE': {
+      snake = [...snake].reverse();
+      dir = {x:-dir.x, y:-dir.y};
+      nextDir = {...dir};
+      break;
+    }
+    case 'SHRINK': {
+      snake.splice(Math.max(1, snake.length-4));
+      break;
+    }
+    case 'TELEPORT': {
+      const dx = Math.floor(Math.random()*COLS);
+      const dy = Math.floor(Math.random()*ROWS);
+      snake = snake.map(s=>({x:(s.x+dx)%COLS, y:(s.y+dy)%ROWS}));
+      break;
+    }
+    case 'SPEED_BURST':
+    case 'CHAOS':
+    case 'GHOST':
+    case 'TIME_WARP':
+    case 'BLIND':
+      addEffect(type);
+      break;
+  }
+  flashEffect(type);
+}
+
+function flashEffect(type) {
+  // Visual feedback for instant effects
+  const def = PU_DEFS[type];
+  const chip = document.createElement('div');
+  chip.className = 'effect-chip';
+  chip.innerHTML = `<div class="effect-dot" style="background:${def.color}"></div>${def.icon} ${def.name}`;
+  chip.style.borderColor = def.color;
+  document.getElementById('effects-bar').appendChild(chip);
+  if(!PU_DEFS[type].duration) {
+    setTimeout(()=>chip.remove(), 1200);
+  }
+}
+
+/* ── Game tick ── */
+function tick() {
+  if(!gameRunning || gamePaused) return;
+  cleanEffects();
+
+  dir = {...nextDir};
+
+  // New head position
+  let nx = snake[0].x + dir.x;
+  let ny = snake[0].y + dir.y;
+
+  // Wall collision
+  if(hasEffect('GHOST')) {
+    nx = ((nx % COLS) + COLS) % COLS;
+    ny = ((ny % ROWS) + ROWS) % ROWS;
+  } else {
+    if(nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) {
+      endGame(); return;
+    }
+  }
+
+  // Self collision (skip head check for ghost/teleport edge cases)
+  if(snake.some((s,i)=>i>0 && s.x===nx && s.y===ny)) {
+    endGame(); return;
+  }
+
+  snake.unshift({x:nx, y:ny});
+
+  // Grow or shrink tail
+  if(growPending > 0) {
+    growPending--;
+  } else {
+    snake.pop();
+  }
+
+  // Check food
+  const fi = foods.findIndex(f=>f.x===nx && f.y===ny);
+  if(fi >= 0) {
+    const food = foods[fi];
+    const def = FOOD_DEFS[food.type];
+    addScore(def.pts);
+    growPending += def.grow;
+    foods.splice(fi,1);
+    spawnFoods();
+    moveCount++;
+  }
+
+  // Check powerups
+  const pi = powerups.findIndex(p=>p.x===nx && p.y===ny);
+  if(pi >= 0) {
+    applyPowerup(powerups[pi].type);
+    powerups.splice(pi,1);
+    moveCount = 0;
+  }
+
+  // Spawn powerup periodically
+  if(moveCount >= 6 + Math.floor(Math.random()*7)) {
+    spawnPowerup();
+    moveCount = 0;
+  }
+
+  updateHUD();
+  schedTick();
+}
+
+function schedTick() {
+  clearTimeout(tickTimeout);
+  tickTimeout = setTimeout(tick, getSpeed());
+}
+
+/* ── Score & level ── */
+function addScore(pts) {
+  score += pts;
+  if(score > best) {
+    best = score;
+    localStorage.setItem('devilsnake-best', best);
+  }
+  const newLevel = Math.floor(score/100)+1;
+  if(newLevel > level) level = Math.min(newLevel, 12);
+  // Flash score
+  const el = document.getElementById('hud-score');
+  el.classList.remove('flash');
+  void el.offsetWidth;
+  el.classList.add('flash');
+}
+
+function updateHUD() {
+  document.getElementById('hud-score').textContent = score;
+  document.getElementById('hud-level').textContent = level;
+  document.getElementById('hud-best').textContent  = best;
+
+  // Update effects bar
+  const bar = document.getElementById('effects-bar');
+  const now = Date.now();
+  // Remove chips for expired effects
+  bar.querySelectorAll('.effect-chip[data-effect]').forEach(chip=>{
+    const ef = activeEffects.find(e=>e.type===chip.dataset.effect);
+    if(!ef || ef.endTime < now) chip.remove();
+    else {
+      const rem = Math.ceil((ef.endTime-now)/1000);
+      const timerEl = chip.querySelector('.effect-timer');
+      if(timerEl) timerEl.textContent = rem+'s';
+    }
+  });
+  // Add new chips for active effects
+  activeEffects.forEach(ef=>{
+    if(ef.endTime < now) return;
+    if(bar.querySelector(`[data-effect="${ef.type}"]`)) return;
+    const def = PU_DEFS[ef.type];
+    const rem = Math.ceil((ef.endTime-now)/1000);
+    const chip = document.createElement('div');
+    chip.className='effect-chip';
+    chip.dataset.effect = ef.type;
+    chip.style.borderColor = def.color;
+    chip.innerHTML = `<div class="effect-dot" style="background:${def.color}"></div>${def.icon} ${def.name} <span class="effect-timer">${rem}s</span>`;
+    bar.appendChild(chip);
+  });
+}
+
+/* ── Rendering ── */
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  drawGrid();
+  drawFoods();
+  drawPowerup();
+  drawSnake();
+  if(hasEffect('BLIND')) drawBlind();
+  animFrame = requestAnimationFrame(render);
+}
+
+function drawGrid() {
+  ctx.strokeStyle = 'rgba(186,172,148,.2)';
+  ctx.lineWidth = 0.5;
+  for(let x=0;x<=COLS;x++){
+    ctx.beginPath();ctx.moveTo(x*CELL,0);ctx.lineTo(x*CELL,H);ctx.stroke();
+  }
+  for(let y=0;y<=ROWS;y++){
+    ctx.beginPath();ctx.moveTo(0,y*CELL);ctx.lineTo(W,y*CELL);ctx.stroke();
+  }
+}
+
+function drawRoundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.roundRect(x,y,w,h,r);
+}
+
+function snakeColor(i, total) {
+  const t = i/Math.max(total-1,1);
+  const r = Math.round(196 - t*80);
+  const g = Math.round(30  - t*20);
+  const b = Math.round(58  - t*30);
+  const a = hasEffect('GHOST') ? 0.42 : 1;
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function drawSnake() {
+  const n = snake.length;
+  const isGhost = hasEffect('GHOST');
+
+  snake.forEach((seg, i) => {
+    const px = seg.x*CELL+1, py = seg.y*CELL+1;
+    const sz = CELL-2;
+
+    // Glow for head
+    if(i===0) {
+      ctx.shadowColor = isGhost ? 'rgba(15,118,110,.8)' : 'rgba(196,30,58,.7)';
+      ctx.shadowBlur  = isGhost ? 16 : 12;
+    } else {
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.fillStyle = snakeColor(i, n);
+    drawRoundRect(px, py, sz, sz, i===0 ? 7 : 5);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Eyes on head
+    if(i===0) {
+      const ex = dir.x, ey = dir.y;
+      const cx_ = seg.x*CELL+CELL/2;
+      const cy_ = seg.y*CELL+CELL/2;
+
+      // Eye offset perpendicular to direction
+      const perp = {x:-ey, y:ex};
+      const eyeOff = 4.5;
+      const fwdOff = 4.5;
+
+      [[1,-1],[1,1]].forEach(([fw,pp])=>{
+        const ex_ = cx_ + dir.x*fwdOff + perp.x*eyeOff*pp;
+        const ey_ = cy_ + dir.y*fwdOff + perp.y*eyeOff*pp;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();ctx.arc(ex_,ey_,2.8,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle = '#1C1008';
+        ctx.beginPath();ctx.arc(ex_+dir.x*0.7,ey_+dir.y*0.7,1.5,0,Math.PI*2);ctx.fill();
+      });
+    }
+  });
+}
+
+function drawFoods() {
+  const t = Date.now()/1000;
+  foods.forEach((food,fi) => {
+    const def = FOOD_DEFS[food.type];
+    const cx = food.x*CELL+CELL/2;
+    const cy = food.y*CELL+CELL/2;
+    const bob = Math.sin(t*2+fi*1.4)*1.5;
+
+    // Glow
+    ctx.shadowColor = def.glow;
+    ctx.shadowBlur  = 14;
+
+    // Circle
+    ctx.fillStyle = def.color;
+    ctx.beginPath();
+    ctx.arc(cx, cy+bob, CELL*0.37, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Shine
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(cx-2, cy+bob-3, CELL*0.12, CELL*0.08, -0.5, 0, Math.PI*2);
+    ctx.fill();
+
+    // Label
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = `bold ${CELL*0.38}px -apple-system,sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(def.label, cx, cy+bob+0.5);
+  });
+}
+
+function drawPowerup() {
+  powerups.forEach(powerup => {
+  const def = PU_DEFS[powerup.type];
+  const t = Date.now()/1000;
+  const cx = powerup.x*CELL+CELL/2;
+  const cy = powerup.y*CELL+CELL/2;
+  const bob = Math.sin(t*2.5)*2;
+  const rot = t*1.2;
+  const pulse = 0.85 + Math.sin(t*3)*0.15;
+  const sz = CELL*0.45*pulse;
+
+  ctx.save();
+  ctx.translate(cx, cy+bob);
+  ctx.rotate(rot);
+
+  // Glow
+  ctx.shadowColor = def.color;
+  ctx.shadowBlur  = 20;
+
+  // Diamond
+  ctx.fillStyle = def.color;
+  ctx.beginPath();
+  ctx.moveTo(0,-sz);
+  ctx.lineTo(sz,0);
+  ctx.lineTo(0,sz);
+  ctx.lineTo(-sz,0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Inner shine
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.beginPath();
+  ctx.moveTo(0,-sz*0.55);
+  ctx.lineTo(sz*0.55,0);
+  ctx.lineTo(0,0);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+
+  // Icon text
+  ctx.fillStyle = '#fff';
+  ctx.font = `${CELL*0.46}px Palatino,'Palatino Linotype',serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(def.icon, cx, cy+bob+0.5);
+  }); // end powerups.forEach
+}
+
+function drawBlind() {
+  const t = Date.now()/1000;
+  const eff = activeEffects.find(e=>e.type==='BLIND');
+  if(!eff) return;
+  const rem = (eff.endTime - Date.now())/PU_DEFS.BLIND.duration;
+  const alpha = Math.min(0.78, rem*0.9+0.1);
+
+  // Dark patches covering most of the board
+  ctx.fillStyle = `rgba(20,12,6,${alpha})`;
+  // Cover all except a small window around head
+  const hx = snake[0].x*CELL, hy = snake[0].y*CELL;
+  const view = CELL*3.5;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0,0,W,H);
+  ctx.arc(hx+CELL/2, hy+CELL/2, view, 0, Math.PI*2, true);
+  ctx.fill('evenodd');
+  ctx.restore();
+}
+
+/* ── Game lifecycle ── */
+function startGame() {
+  document.getElementById('screen-intro').style.display = 'none';
+  const sg = document.getElementById('screen-game');
+  sg.style.display = 'flex';
+
+  setupCanvas();
+  initState();
+  document.getElementById('hud-best').textContent = best;
+
+  gameRunning = true;
+  schedTick();
+  render();
+}
+
+function endGame() {
+  gameRunning = false;
+  clearTimeout(tickTimeout);
+
+  if(score > best) {
+    best = score;
+    localStorage.setItem('devilsnake-best', best);
+  }
+
+  setTimeout(()=>{ showGameOver(); }, 280);
+}
+
+
+function showGameOver() {
+  document.getElementById('go-score').textContent = score;
+  document.getElementById('go-best').innerHTML = `历史最佳 <span>${best}</span>`;
+
+  document.getElementById('screen-gameover').classList.add('show');
+}
+
+function restartGame() {
+  document.getElementById('screen-gameover').classList.remove('show');
+  cancelAnimationFrame(animFrame);
+  clearTimeout(tickTimeout);
+  document.getElementById('effects-bar').innerHTML = '';
+  setupCanvas();
+  initState();
+  document.getElementById('hud-best').textContent = best;
+  gameRunning = true;
+  schedTick();
+  render();
+}
+
+function backToIntro() {
+  document.getElementById('screen-gameover').classList.remove('show');
+  cancelAnimationFrame(animFrame);
+  clearTimeout(tickTimeout);
+  document.getElementById('screen-game').style.display = 'none';
+  document.getElementById('screen-intro').style.display = 'flex';
+}
+
+function togglePause() {
+  if(!gameRunning) return;
+  gamePaused = !gamePaused;
+  document.getElementById('pause-overlay').classList.toggle('show', gamePaused);
+  if(!gamePaused) schedTick();
+}
+
+/* ── Input ── */
+const DIR_MAP = {
+  ArrowUp:{x:0,y:-1}, ArrowDown:{x:0,y:1},
+  ArrowLeft:{x:-1,y:0}, ArrowRight:{x:1,y:0},
+  w:{x:0,y:-1}, s:{x:0,y:1}, a:{x:-1,y:0}, d:{x:1,y:0},
+  W:{x:0,y:-1}, S:{x:0,y:1}, A:{x:-1,y:0}, D:{x:1,y:0},
+};
+
+document.addEventListener('keydown', e => {
+  if(e.key===' ' || e.key==='p' || e.key==='P') {
+    e.preventDefault();
+    togglePause();
+    return;
+  }
+  const nd = DIR_MAP[e.key];
+  if(!nd) return;
+  e.preventDefault();
+  // Prevent 180° reversal
+  if(nd.x===-dir.x && nd.y===-dir.y) return;
+  nextDir = nd;
+});
+
+// Touch
+canvas.addEventListener('touchstart', e=>{
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+  e.preventDefault();
+},{passive:false});
+
+canvas.addEventListener('touchend', e=>{
+  if(touchStartX===undefined) return;
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if(Math.abs(dx)<10 && Math.abs(dy)<10) { togglePause(); return; }
+  let nd;
+  if(Math.abs(dx)>Math.abs(dy)) nd = dx>0?{x:1,y:0}:{x:-1,y:0};
+  else nd = dy>0?{x:0,y:1}:{x:0,y:-1};
+  if(nd.x===-dir.x && nd.y===-dir.y) return;
+  nextDir = nd;
+  e.preventDefault();
+},{passive:false});
+
+window.addEventListener('resize', ()=>{
+  if(document.getElementById('screen-game').style.display==='flex') setupCanvas();
+});
+</script>
+</body>
+</html>
